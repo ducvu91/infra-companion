@@ -59,7 +59,15 @@ export const TOOL_TAB_KINDS = [
   'pkg-updates',
   'known-hosts',
   /** Trang SFTP "mở trước, chọn host sau" — tab riêng cho theme Infra (Navigator có mục 📁 SFTP). */
-  'files'
+  'files',
+  /** Trung tâm thông báo — lịch sử cảnh báo mọi hệ theo dõi + đánh dấu sự kiện. */
+  'notifications',
+  /** Theo dõi URL (synthetic HTTP monitoring). */
+  'http-checks',
+  /** Kiểm kê fleet — bảng rộng, hợp tab hơn popup. */
+  'inventory',
+  /** Sổ tay vận hành — đọc cạnh terminal đang làm. */
+  'runbooks'
 ] as const
 export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number]
 

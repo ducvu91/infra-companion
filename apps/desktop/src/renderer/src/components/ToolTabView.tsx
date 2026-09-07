@@ -11,6 +11,10 @@ import { KeyRotateModal } from './KeyRotateModal'
 import { DiskUsageModal } from './DiskUsageModal'
 import { PackageUpdatesModal } from './PackageUpdatesModal'
 import { KnownHostsModal } from './KnownHostsModal'
+import { NotificationsModal } from './NotificationsModal'
+import { HttpChecksModal } from './HttpChecksModal'
+import { InventoryModal } from './InventoryModal'
+import { RunbooksModal } from './RunbooksModal'
 import { useT } from '../i18n'
 import type { I18nKey } from '../i18n/dict'
 import type { ToolTabKind } from '../stores/tabs'
@@ -35,7 +39,11 @@ const TOOLS: Partial<Record<ToolTabKind, { icon: string; titleKey: I18nKey; rend
   'key-rotate': { icon: '🔄', titleKey: 'rotate.title', render: () => <KeyRotateModal embedded /> },
   'disk-usage': { icon: '💾', titleKey: 'disk.title', render: () => <DiskUsageModal host={null} embedded /> },
   'pkg-updates': { icon: '📦', titleKey: 'pkg.title', render: () => <PackageUpdatesModal embedded /> },
-  'known-hosts': { icon: '🔏', titleKey: 'knownHosts.title', render: () => <KnownHostsModal embedded /> }
+  'known-hosts': { icon: '🔏', titleKey: 'knownHosts.title', render: () => <KnownHostsModal embedded /> },
+  notifications: { icon: '🔔', titleKey: 'events.title', render: () => <NotificationsModal embedded /> },
+  'http-checks': { icon: '🌐', titleKey: 'http.title', render: () => <HttpChecksModal embedded /> },
+  inventory: { icon: '📇', titleKey: 'inv.title', render: () => <InventoryModal embedded /> },
+  runbooks: { icon: '📖', titleKey: 'runbooks.title', render: () => <RunbooksModal embedded /> }
 }
 
 export function ToolTabView({ kind, active }: { kind: ToolTabKind; active: boolean }) {

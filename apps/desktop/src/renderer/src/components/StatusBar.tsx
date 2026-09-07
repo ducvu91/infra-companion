@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useEventsStore } from '../stores/events'
 import { useGdriveStore } from '../stores/gdrive'
 import { useTabsStore } from '../stores/tabs'
 import { useUiStore } from '../stores/ui'
@@ -19,6 +20,7 @@ export function StatusBar() {
   const lock = useVaultStore((s) => s.lock)
   const setModal = useUiStore((s) => s.setModal)
   const gdrive = useGdriveStore((s) => s.status)
+  const unread = useEventsStore((s) => s.unread)
   const tab = tabs.find((t) => t.id === activeId)
   const { electron, node } = window.infra.versions
   const appVersion = __APP_VERSION__
@@ -44,6 +46,16 @@ export function StatusBar() {
     <div className="border-edge bg-panel text-subtle flex h-6 shrink-0 items-center justify-between border-t px-3 text-[11px] select-none">
       <span className="truncate">{info}</span>
       <span className="flex items-center gap-3">
+        {/* Chuông trung tâm thông báo đứng ĐẦU cụm phải (trước tài khoản Google) — số chưa đọc tô
+            warning để liếc là thấy có gì đêm qua; email dài không được đẩy nó đi chỗ khác */}
+        <button
+          className={`hover:text-content ${unread > 0 ? 'text-warning' : ''}`}
+          title={t('events.title')}
+          aria-label={t('events.title')}
+          onClick={() => setModal('notifications')}
+        >
+          🔔{unread > 0 ? ` ${unread > 99 ? '99+' : unread}` : ''}
+        </button>
         {/* Tài khoản Google đang kết nối (sync qua Drive) — bấm là vào thẳng hộp Sync.
             Email cắt bớt để hàng trạng thái không bị một địa chỉ dài chiếm hết chỗ. */}
         {gdrive?.connected && (

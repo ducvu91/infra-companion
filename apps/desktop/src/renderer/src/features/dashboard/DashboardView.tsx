@@ -22,15 +22,17 @@ import { MetricChart } from '../../components/MetricsHistoryModal'
 import { ToolGrid } from './ToolGrid'
 import { GroupHostsPanel } from './GroupHostsPanel'
 import { APP_SHORTCUTS, terminalShortcuts } from '../../lib/shortcutList'
+import { useHttpChecksStore } from '../../stores/httpChecks'
 import { useT } from '../../i18n'
 
 const LOCALES = { vi: 'vi-VN', en: 'en-US', ja: 'ja-JP' } as const
 
 /** Nhãn cho từng loại vấn đề trên dải "Cần chú ý". */
-const ATTENTION_LABEL: Record<AttentionKind, 'dashboard.attHostDown' | 'dashboard.attTunnel' | 'dashboard.attRepl'> = {
+const ATTENTION_LABEL: Record<AttentionKind, 'dashboard.attHostDown' | 'dashboard.attTunnel' | 'dashboard.attRepl' | 'dashboard.attHttp'> = {
   'host-down': 'dashboard.attHostDown',
   'tunnel-error': 'dashboard.attTunnel',
-  replication: 'dashboard.attRepl'
+  replication: 'dashboard.attRepl',
+  'http-down': 'dashboard.attHttp'
 }
 
 // Giống Sidebar: user@host hoặc user@host:port thì coi là quick-connect target
@@ -107,6 +109,9 @@ export function DashboardView({ active }: { active: boolean }) {
     [replRuntime]
   )
 
+  // Theo dõi URL: check đang BÁO (fail liên tiếp đủ số lần) cũng lên dải "Cần chú ý"
+  const httpChecks = useHttpChecksStore((s) => s.checks)
+  const httpSummaries = useHttpChecksStore((s) => s.summaries)
   const attention = useMemo(
     () =>
       collectAttention({
@@ -115,9 +120,11 @@ export function DashboardView({ active }: { active: boolean }) {
         hostStatus: hostStatuses,
         tunnels,
         tunnelState: tunnelStates,
-        replicaIssues
+        replicaIssues,
+        httpChecks,
+        httpState: httpSummaries
       }),
-    [watcherEnabled, hosts, hostStatuses, tunnels, tunnelStates, replicaIssues]
+    [watcherEnabled, hosts, hostStatuses, tunnels, tunnelStates, replicaIssues, httpChecks, httpSummaries]
   )
 
   // Cheat sheet: phím app (cố định) + 4 phím terminal theo đúng giá trị user đang đặt

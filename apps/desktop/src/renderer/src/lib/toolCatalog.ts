@@ -83,10 +83,16 @@ export const TOOLS: readonly ToolEntry[] = [
   // --- Cả fleet ---
   { id: 'bulk', menuKey: 'menu.bulk', descKey: 'features.dBulk', category: 'fleet', modal: 'bulk', common: true },
   { id: 'monitor', menuKey: 'menu.monitor', descKey: 'features.dMonitor', category: 'fleet', modal: 'monitor', common: true },
+  { id: 'notifications', menuKey: 'menu.notifications', descKey: 'features.dNotifications', category: 'fleet', modal: 'notifications', common: false },
+  { id: 'http-checks', menuKey: 'menu.httpChecks', descKey: 'features.dHttpChecks', category: 'fleet', modal: 'http-checks', common: false },
+  // Bảng kiểm kê rộng → mở dạng TAB ngay từ đầu (như SFTP), không phải popup
+  { id: 'inventory', menuKey: 'menu.inventory', descKey: 'features.dInventory', category: 'fleet', tab: 'inventory', common: false },
   { id: 'pkg-updates', menuKey: 'menu.pkgUpdates', descKey: 'features.dPkgUpdates', category: 'fleet', modal: 'pkg-updates', common: false },
   { id: 'key-rotate', menuKey: 'menu.keyRotate', descKey: 'features.dKeyRotate', category: 'fleet', modal: 'key-rotate', common: false },
 
   // --- Chẩn đoán ---
+  // Sổ tay vận hành ở LẠI menu `⋯`: đây là thứ người ta cần đúng lúc đang ở tab terminal
+  { id: 'runbooks', menuKey: 'menu.runbooks', descKey: 'features.dRunbooks', category: 'diagnostics', modal: 'runbooks', common: true },
   { id: 'processes', menuKey: 'menu.processes', descKey: 'features.dProcesses', category: 'diagnostics', modal: 'processes', common: false },
   { id: 'services', menuKey: 'menu.services', descKey: 'features.dServices', category: 'diagnostics', modal: 'services', common: false },
   { id: 'disk-usage', menuKey: 'menu.diskUsage', descKey: 'features.dDiskUsage', category: 'diagnostics', modal: 'disk-usage', common: false },
@@ -106,6 +112,7 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'sync', menuKey: 'menu.sync', descKey: 'features.dSync', category: 'data', modal: 'sync', common: true },
   { id: 'export-hosts', menuKey: 'menu.export', descKey: 'features.dExport', category: 'data', modal: 'export-hosts', common: false },
   { id: 'do-import', menuKey: 'menu.doImport', descKey: 'features.dDoImport', category: 'data', modal: 'do-import', common: false },
+  { id: 'client-import', menuKey: 'menu.clientImport', descKey: 'features.dClientImport', category: 'data', modal: 'client-import', common: false },
 
   // --- Ứng dụng ---
   { id: 'ai', menuKey: 'menu.ai', descKey: 'features.dAi', category: 'app', modal: 'ai', common: false },

@@ -90,6 +90,10 @@ export const IPC = {
   FS_DELETE: 'fs:delete',
 
   IMPORT_SSH_CONFIG: 'import:ssh-config',
+  /** Nhập từ client SSH khác: chọn file → xem trước; đọc PuTTY Registry (Windows); ghi vault. */
+  IMPORT_CLIENT_PICK: 'import:client-pick',
+  IMPORT_CLIENT_PUTTY_REGISTRY: 'import:client-putty-registry',
+  IMPORT_CLIENT_COMMIT: 'import:client-commit',
   IMPORT_DO_CONFIG: 'import:do-config',
   IMPORT_DO_SAVE_ACCOUNT: 'import:do-save-account',
   IMPORT_DO_DELETE_ACCOUNT: 'import:do-delete-account',
@@ -330,7 +334,45 @@ export const IPC = {
 
   // ── F53: khay hệ thống + chạy nền ────────────────────────────────────────
   /** Renderer báo main tuỳ chọn khay (đóng cửa sổ có thu vào khay không, ngôn ngữ menu khay). */
-  APP_TRAY_PREFS: 'app:tray-prefs'
+  APP_TRAY_PREFS: 'app:tray-prefs',
+
+  // ── Trung tâm thông báo + đánh dấu sự kiện ───────────────────────────────
+  EVENTS_LIST: 'events:list',
+  EVENTS_UNREAD: 'events:unread',
+  EVENTS_ACK: 'events:ack',
+  EVENTS_ACK_ALL: 'events:ack-all',
+  EVENTS_DELETE: 'events:delete',
+  EVENTS_ADD_MARKER: 'events:add-marker',
+  EVENTS_TIMELINE: 'events:timeline',
+  /** main → renderer: một sự kiện vừa ghi. */
+  EVENTS_NEW: 'events:new',
+  /** main → renderer: số chưa đọc đổi (sau ack/xoá). */
+  EVENTS_CHANGED: 'events:changed',
+
+  // ── Theo dõi URL (synthetic HTTP monitoring) ─────────────────────────────
+  HTTP_CHECKS_LIST: 'http-checks:list',
+  HTTP_CHECKS_SAVE: 'http-checks:save',
+  HTTP_CHECKS_DELETE: 'http-checks:delete',
+  HTTP_CHECKS_RUN_NOW: 'http-checks:run-now',
+  HTTP_CHECKS_RESULTS: 'http-checks:results',
+  HTTP_CHECKS_SUMMARIES: 'http-checks:summaries',
+  /** main → renderer: một kết quả đo vừa có. */
+  HTTP_CHECKS_RESULT_EVENT: 'http-checks:result',
+  /** main → renderer: tóm tắt của check vừa đo (uptime, fail liên tiếp, đang cảnh báo). */
+  HTTP_CHECKS_SUMMARY_EVENT: 'http-checks:summary',
+
+  // ── Kiểm kê fleet ────────────────────────────────────────────────────────
+  INVENTORY_LIST: 'inventory:list',
+  INVENTORY_COLLECT: 'inventory:collect',
+  INVENTORY_EXPORT_CSV: 'inventory:export-csv',
+  INVENTORY_DELETE: 'inventory:delete',
+  /** main → renderer: xong thêm một host trong đợt thu. */
+  INVENTORY_PROGRESS: 'inventory:progress',
+
+  // ── Sổ tay vận hành (sổ tay riêng của user lưu trong vault meta) ─────────
+  RUNBOOKS_LIST_CUSTOM: 'runbooks:list-custom',
+  RUNBOOKS_SAVE_CUSTOM: 'runbooks:save-custom',
+  RUNBOOKS_DELETE_CUSTOM: 'runbooks:delete-custom'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

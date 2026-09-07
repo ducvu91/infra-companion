@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { MetricHistoryPointDto } from '@infra/shared'
+import { toChartMarkers, type ChartMarker, type MetricHistoryPointDto } from '@infra/shared'
 import { useMonitorStore, type HostMonitor } from '../stores/monitor'
 import { usePluginStore } from '../stores/plugins'
 import { useTabsStore } from '../stores/tabs'
@@ -208,13 +208,20 @@ export function MonitorCard({ monitor, large }: { monitor: HostMonitor; large?: 
 function InlineHistory({ hostId }: { hostId: string }) {
   const t = useT()
   const [points, setPoints] = useState<MetricHistoryPointDto[] | null>(null)
+  const [markers, setMarkers] = useState<ChartMarker[]>([])
+  const [window_, setWindow] = useState<{ from: number; to: number } | null>(null)
 
   useEffect(() => {
     let alive = true
     const load = (): void => {
       const now = Date.now()
+      setWindow({ from: now - 3_600_000, to: now })
       void window.infra.monitor.queryHistory(hostId, now - 3_600_000, now, 1).then((rows) => {
         if (alive) setPoints(rows)
+      })
+      // Vạch sự kiện (marker deploy, alert) cùng khoảng 1h — để nhìn card là biết đỉnh CPU đến sau việc gì
+      void window.infra.events.timeline(hostId, now - 3_600_000, now).then((rows) => {
+        if (alive) setMarkers(toChartMarkers(rows))
       })
     }
     load()
@@ -233,9 +240,9 @@ function InlineHistory({ hostId }: { hostId: string }) {
       )}
       {points !== null && points.length > 0 && (
         <>
-          <MetricChart label={`Load (${t('monitor.loadNorm')})`} points={points} field="loadPct" resMs={60_000} autoScale compact />
-          <MetricChart label="CPU" points={points} field="cpuPct" resMs={60_000} compact />
-          <MetricChart label={t('monitor.metricConn')} points={points} field="conns" resMs={60_000} autoScale unit="" compact />
+          <MetricChart label={`Load (${t('monitor.loadNorm')})`} points={points} field="loadPct" resMs={60_000} autoScale compact markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+          <MetricChart label="CPU" points={points} field="cpuPct" resMs={60_000} compact markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+          <MetricChart label={t('monitor.metricConn')} points={points} field="conns" resMs={60_000} autoScale unit="" compact markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
         </>
       )}
       <button

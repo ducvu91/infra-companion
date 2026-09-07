@@ -159,6 +159,7 @@ export function HostsView({ active }: { active: boolean }) {
             <div className="border-edge-strong bg-elevated absolute top-full right-0 z-50 mt-1 min-w-52 rounded-md border py-1 shadow-xl">
               <MoreItem label={t('menu.import')} onClick={() => void runImport()} close={() => setMoreOpen(false)} />
               <MoreItem label={t('menu.doImport')} onClick={() => setModal('do-import')} close={() => setMoreOpen(false)} />
+              <MoreItem label={t('menu.clientImport')} onClick={() => setModal('client-import')} close={() => setMoreOpen(false)} />
               <MoreItem label={t('menu.export')} onClick={() => setModal('export-hosts')} close={() => setMoreOpen(false)} />
             </div>
           )}

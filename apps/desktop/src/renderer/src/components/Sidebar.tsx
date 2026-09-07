@@ -330,7 +330,8 @@ export function Sidebar({ fluid = false }: { readonly fluid?: boolean } = {}) {
           onClose={() => setMenuOpen(false)}
           actions={[
             { id: 'create-group', labelKey: 'menu.createGroup', run: () => setModal({ kind: 'group', group: null }) },
-            { id: 'import-ssh-config', labelKey: 'menu.import', run: () => void runImport() }
+            { id: 'import-ssh-config', labelKey: 'menu.import', run: () => void runImport() },
+            { id: 'import-clients', labelKey: 'menu.clientImport', run: () => useUiStore.getState().setModal('client-import') }
           ]}
         />
       </div>

@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import { release } from 'node:os'
 import {
   IPC,
+  type AppEventDto,
+  type HttpCheckResultDto,
+  type HttpCheckSummaryDto,
+  type InventoryProgressDto,
   type BulkRunEvent,
   type GroupInput,
   type HostInput,
@@ -82,6 +86,39 @@ const api: InfraApi = {
   app: {
     setTrayPrefs: (prefs) => ipcRenderer.send(IPC.APP_TRAY_PREFS, prefs)
   },
+  events: {
+    list: (query) => ipcRenderer.invoke(IPC.EVENTS_LIST, query),
+    unread: () => ipcRenderer.invoke(IPC.EVENTS_UNREAD),
+    ack: (id) => ipcRenderer.invoke(IPC.EVENTS_ACK, id),
+    ackAll: () => ipcRenderer.invoke(IPC.EVENTS_ACK_ALL),
+    remove: (id) => ipcRenderer.invoke(IPC.EVENTS_DELETE, id),
+    addMarker: (input) => ipcRenderer.invoke(IPC.EVENTS_ADD_MARKER, input),
+    timeline: (hostId, fromTs, toTs) => ipcRenderer.invoke(IPC.EVENTS_TIMELINE, hostId, fromTs, toTs),
+    onNew: (cb) => subscribe<AppEventDto>(IPC.EVENTS_NEW, cb),
+    onChanged: (cb) => subscribe<number>(IPC.EVENTS_CHANGED, cb)
+  },
+  httpChecks: {
+    list: () => ipcRenderer.invoke(IPC.HTTP_CHECKS_LIST),
+    save: (input) => ipcRenderer.invoke(IPC.HTTP_CHECKS_SAVE, input),
+    remove: (id) => ipcRenderer.invoke(IPC.HTTP_CHECKS_DELETE, id),
+    runNow: (id) => ipcRenderer.invoke(IPC.HTTP_CHECKS_RUN_NOW, id),
+    results: (id, sinceTs) => ipcRenderer.invoke(IPC.HTTP_CHECKS_RESULTS, id, sinceTs),
+    summaries: () => ipcRenderer.invoke(IPC.HTTP_CHECKS_SUMMARIES),
+    onResult: (cb) => subscribe<HttpCheckResultDto>(IPC.HTTP_CHECKS_RESULT_EVENT, cb),
+    onSummary: (cb) => subscribe<HttpCheckSummaryDto>(IPC.HTTP_CHECKS_SUMMARY_EVENT, cb)
+  },
+  inventory: {
+    list: () => ipcRenderer.invoke(IPC.INVENTORY_LIST),
+    collect: (hostIds) => ipcRenderer.invoke(IPC.INVENTORY_COLLECT, hostIds),
+    exportCsv: () => ipcRenderer.invoke(IPC.INVENTORY_EXPORT_CSV),
+    remove: (hostId) => ipcRenderer.invoke(IPC.INVENTORY_DELETE, hostId),
+    onProgress: (cb) => subscribe<InventoryProgressDto>(IPC.INVENTORY_PROGRESS, cb)
+  },
+  runbooks: {
+    listCustom: () => ipcRenderer.invoke(IPC.RUNBOOKS_LIST_CUSTOM),
+    saveCustom: (runbook) => ipcRenderer.invoke(IPC.RUNBOOKS_SAVE_CUSTOM, runbook),
+    deleteCustom: (id) => ipcRenderer.invoke(IPC.RUNBOOKS_DELETE_CUSTOM, id)
+  },
   terminal: {
     create: (req: TerminalCreateRequest) => ipcRenderer.invoke(IPC.TERM_CREATE, req),
     write: (sessionId, data) => ipcRenderer.send(IPC.TERM_WRITE, sessionId, data),
@@ -139,6 +176,9 @@ const api: InfraApi = {
   },
   importer: {
     sshConfig: () => ipcRenderer.invoke(IPC.IMPORT_SSH_CONFIG),
+    clientPick: () => ipcRenderer.invoke(IPC.IMPORT_CLIENT_PICK),
+    clientPuttyRegistry: () => ipcRenderer.invoke(IPC.IMPORT_CLIENT_PUTTY_REGISTRY),
+    clientCommit: (drafts, source) => ipcRenderer.invoke(IPC.IMPORT_CLIENT_COMMIT, drafts, source),
     doConfig: () => ipcRenderer.invoke(IPC.IMPORT_DO_CONFIG),
     doSaveAccount: (input) => ipcRenderer.invoke(IPC.IMPORT_DO_SAVE_ACCOUNT, input),
     doDeleteAccount: (id) => ipcRenderer.invoke(IPC.IMPORT_DO_DELETE_ACCOUNT, id),

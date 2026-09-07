@@ -32,6 +32,11 @@ export type AppModal =
   | 'hostmap'
   | 'localdev-settings'
   | 'help'
+  | 'notifications'
+  | 'http-checks'
+  | 'client-import'
+  | 'inventory'
+  | 'runbooks'
   | null
 
 /**

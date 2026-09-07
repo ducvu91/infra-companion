@@ -4,6 +4,7 @@ import { AlertEngine, MetricsStore, MonitorService, buildWebhookRequest, formatA
 import { IPC, type MonitorAlertDto, type MonitorSettingsDto } from '@infra/shared'
 import { touchActivity } from './vault'
 import { makeHostKeyVerifier, prepareConnection } from './connection'
+import { recordEvent } from './events'
 import { postWebhook, readMonitorSettings, registerMonitorSettingsIpc } from './monitorSettings'
 
 /** AlertRules cho engine = settings bỏ phần webhook/osNotify. */
@@ -42,6 +43,15 @@ export function registerMonitorIpc(): () => void {
     for (const subscriber of subscribers) {
       if (!subscriber.isDestroyed()) subscriber.send(IPC.MONITOR_ALERT, dto)
     }
+    // Kênh thứ 4: trung tâm thông báo (toast trôi là mất; đây là bản ghi còn lại + vạch trên biểu đồ)
+    recordEvent({
+      kind: dto.kind === 'breach' ? 'alert' : 'recover',
+      source: 'monitor',
+      severity: dto.kind === 'breach' ? (dto.metric === 'offline' ? 'critical' : 'warning') : 'info',
+      hostId: dto.hostId,
+      title: formatAlertText(dto),
+      ts: dto.ts
+    })
     if (dto.kind === 'breach' && settings.osNotify && Notification.isSupported()) {
       const notification = new Notification({ title: 'Infra Companion — cảnh báo', body: formatAlertText(dto) })
       notification.on('click', () => {

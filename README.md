@@ -85,7 +85,7 @@
 - **SSH Keys** — generate ed25519, import OpenSSH/PEM/PuTTY; private keys never leave main process in plaintext
 - **Snippets** — parameterized commands (`{{variable}}`), run across multiple sessions at once
 - **Notes per host** — encrypted Markdown note per host (purpose, handoff info, app passwords); quick-view from the sidebar, synced with the host
-- **Import** — `~/.ssh/config` (preserves multi-hop ProxyJump, deduplicates IdentityFile)
+- **Import** — `~/.ssh/config` (preserves multi-hop ProxyJump, deduplicates IdentityFile), and **PuTTY** (a `.reg` export or straight from the Windows Registry), **MobaXterm** (`.mxtsessions`), **WinSCP** (`WinSCP.ini`) and **Termius** (CSV export) with a tick-to-choose preview that keeps their folders as groups and skips duplicates
 
 ### SFTP
 - **Start from SFTP, then pick the host** — SFTP is its own entry (Navigator menu · `⋯` menu · Dashboard grid · palette): local files on the left, *Select host* on the right (SSH hosts by group, searchable), remote files appear in place; change host or disconnect from the header. The SFTP button on a host row still opens a per-host tab
@@ -101,6 +101,14 @@
 - **Pin it where you need it**: ⊞ **open in a tab** (so the popup stops blocking the app) or ⧉ **detach into an always-on-top window** — watch and toggle tunnels while your DB client covers the app
 - **Always-on tunnels** — click ⚡ on a tunnel row (or tick *Start automatically when the app opens* in its editor) and it comes up right after the vault unlocks; **closing the window keeps the app in the system tray** (tunnels, monitoring and the uptime watcher keep running), and the tray menu starts or stops any tunnel without opening the app. Settings → Application turns close-to-tray off
 - **Tunnel through a login-script gate** — a Local forward whose via-host is reached by a login script (nested `ssh` in a shell) tunnels by running `nc` on the innermost hop, so you can reach e.g. a database only pingable from the deepest machine straight from `127.0.0.1` (needs `nc` on the far end)
+
+### Fleet awareness
+- **Notification centre** — every alert (Monitoring thresholds, replication lag, uptime watcher down/up, tunnel errors, URL checks) is recorded, not just toasted: 🔔 in the status bar counts unread, the Notifications tool groups them by day with per-source filters, acknowledge one or all
+- **Event markers on charts** — mark "Deploy v2.3" for one host or the whole fleet; markers and the host's own alerts show as vertical lines on every metrics chart so a spike can be matched to what happened before it
+- **URL checks** — synthetic HTTP monitoring from your machine, running even while the vault is locked: accepted status set, keyword, latency, TLS days left, and **Pin IP** to probe each backend behind the load balancer with the certificate still verified; alerts after N consecutive failures, 24h uptime and latency chart per URL
+- **Tail one log across many hosts** — pick several machines in *Watch a log*; lines merge with a colour-coded `[machine]` prefix, one filter for all
+- **Runbooks** — a built-in cookbook for the jobs you research from scratch every time: whitelist/block an IP (iptables-services · firewalld · ufw · nftables · fail2ban), cron, nginx/Apache allow-deny and vhosts, Let's Encrypt, SSH hardening, sudo users, disk full, systemd, MySQL, log analysis, swap, ports, NTP, Docker, a security check — commands with Copy / Send-to-terminal, `{{ip}}`-style variables filled once, dangerous steps flagged and confirmed; write your own or copy a built-in to adapt (stored in the vault)
+- **Fleet inventory** — one read-only command per host collects OS, kernel, CPU/RAM/disk, uptime, IPs, listening ports, virtualisation, pending reboot and PHP/nginx/Apache/MySQL/Node/Docker/Python versions into a searchable table ("php 7.4", ":3306", "reboot"); cells changed since last time are highlighted, 20 snapshots per host, CSV export
 
 ### Remote Desktop (VNC & RDP)
 - **VNC embedded in a tab** — pure-JS [noVNC](https://github.com/novnc/noVNC) renders the remote screen inside the app; a local WebSocket↔TCP bridge (bound to `127.0.0.1`, one-time token) tunnels through the host's **jump chain** to the target's VNC port, so a VNC box reachable only from a gate just works

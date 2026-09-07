@@ -27,7 +27,11 @@ const TOOL_TAB_META: Record<ToolTabKind, { label: string; icon: string }> = {
   'disk-usage': { label: 'Disk', icon: '💾' },
   'pkg-updates': { label: 'Updates', icon: '📦' },
   'known-hosts': { label: 'Fingerprints', icon: '🔏' },
-  files: { label: 'SFTP', icon: '📁' }
+  files: { label: 'SFTP', icon: '📁' },
+  notifications: { label: 'Notifications', icon: '🔔' },
+  'http-checks': { label: 'URL', icon: '🌐' },
+  inventory: { label: 'Inventory', icon: '📇' },
+  runbooks: { label: 'Runbooks', icon: '📖' }
 }
 
 function toolMeta(kind: AppTab['kind']): { label: string; icon: string } | undefined {

@@ -1414,6 +1414,8 @@ export interface WatcherTargetDto {
   hostId: string
   host: string
   port: number
+  /** Tên host để main ghi sự kiện "không phản hồi / phản hồi lại" đọc được (vault có thể đang khoá). */
+  label?: string
 }
 
 export interface WatcherStatusDto {
@@ -1422,6 +1424,197 @@ export interface WatcherStatusDto {
   /** ms tới khi TCP mở được — null khi fail. */
   latencyMs: number | null
   ts: number
+}
+
+// ---------------------------------------------------------------------------
+// Trung tâm thông báo + đánh dấu sự kiện (events.db ở userData, không mã hoá)
+// ---------------------------------------------------------------------------
+
+/** `alert` = có chuyện; `recover` = hết chuyện; `info` = ghi nhận; `marker` = user tự đánh dấu (deploy…). */
+export type AppEventKind = 'alert' | 'recover' | 'info' | 'marker'
+/** Nguồn phát: từng hệ theo dõi trong app, `user` = marker tay, `app` = chính ứng dụng. */
+export type AppEventSource = 'monitor' | 'replication' | 'watcher' | 'tunnel' | 'http' | 'user' | 'app'
+export type AppEventSeverity = 'info' | 'warning' | 'critical'
+
+export interface AppEventDto {
+  id: number
+  ts: number
+  kind: AppEventKind
+  source: AppEventSource
+  severity: AppEventSeverity
+  /** Host liên quan — null với sự kiện toàn app hoặc marker "cả fleet". */
+  hostId: string | null
+  title: string
+  detail: string | null
+  /** Đã xác nhận lúc nào; null = chưa đọc. Marker không tính là "chưa đọc". */
+  ackedAt: number | null
+}
+
+export interface AppEventInput {
+  kind: AppEventKind
+  source: AppEventSource
+  severity: AppEventSeverity
+  hostId?: string | null
+  title: string
+  detail?: string | null
+  /** Mặc định = bây giờ. Marker cho phép đặt lùi ("deploy lúc 10:00"). */
+  ts?: number
+}
+
+export interface AppEventQuery {
+  /** Chỉ lấy sự kiện từ mốc này (ms). */
+  since?: number
+  unackedOnly?: boolean
+  sources?: AppEventSource[]
+  hostId?: string
+  /** Mặc định 500 — trung tâm thông báo là chỗ xem gần đây, không phải kho lưu trữ. */
+  limit?: number
+}
+
+export interface MarkerInput {
+  hostId?: string | null
+  title: string
+  ts?: number
+}
+
+// ---------------------------------------------------------------------------
+// Theo dõi URL (synthetic HTTP monitoring) — cấu hình ở http-checks.json, kết quả ở checks.db
+// ---------------------------------------------------------------------------
+
+export type HttpCheckMethod = 'GET' | 'HEAD'
+
+export interface HttpCheckDto {
+  id: string
+  label: string
+  url: string
+  method: HttpCheckMethod
+  /** Mã trạng thái chấp nhận: `200` · `200-399` · `200,301,302` · `2xx`. */
+  expectStatus: string
+  /** Từ khoá phải có trong body (chỉ GET, đọc tối đa 64KB) — '' = không kiểm. */
+  keyword: string
+  intervalSec: number
+  timeoutMs: number
+  /**
+   * Ép kết nối TCP tới IP này thay vì DNS — Host header và SNI vẫn theo URL, cert HTTPS vẫn khớp.
+   * Dùng để kiểm TỪNG backend sau load balancer (cùng ý với HostMap). '' = DNS thường.
+   */
+  resolveIp: string
+  enabled: boolean
+  /** Số lần fail LIÊN TIẾP trước khi báo — chống một lần nháy mạng thành cảnh báo. */
+  failsBeforeAlert: number
+  /** Gắn với host nào (tuỳ chọn) để alert/marker của host hiện lên biểu đồ của nó. */
+  hostId: string | null
+  createdAt: number
+}
+
+export type HttpCheckInput = Omit<HttpCheckDto, 'id' | 'createdAt'> & { id?: string }
+
+export interface HttpCheckResultDto {
+  checkId: string
+  ts: number
+  ok: boolean
+  status: number | null
+  latencyMs: number | null
+  /** Số ngày cert TLS còn hạn (null với http:// hoặc khi không đọc được cert). */
+  certDaysLeft: number | null
+  /** Vì sao fail (lỗi mạng, mã sai, thiếu từ khoá) — null khi ok. */
+  error: string | null
+}
+
+/** Tóm tắt một check cho danh sách: main tính từ kho kết quả + bộ đếm fail đang chạy. */
+export interface HttpCheckSummaryDto {
+  checkId: string
+  /** Trong 24h: tổng lần đo, số lần ok, % uptime (null khi chưa đo). */
+  total: number
+  okCount: number
+  uptimePct: number | null
+  avgLatencyMs: number | null
+  last: HttpCheckResultDto | null
+  consecutiveFails: number
+  /** Đang trong trạng thái cảnh báo (đã fail ≥ failsBeforeAlert và chưa hồi). */
+  alerting: boolean
+}
+
+// ---------------------------------------------------------------------------
+// Nhập host từ client SSH khác (PuTTY / MobaXterm / WinSCP / Termius CSV)
+// ---------------------------------------------------------------------------
+
+export type ClientImportFormat = 'putty' | 'mobaxterm' | 'winscp' | 'termius'
+
+/** Một host đã parse, CHƯA ghi — user tick chọn trong bảng xem trước rồi mới commit. */
+export interface ClientImportDraftDto {
+  label: string
+  hostname: string
+  port: number
+  username: string | null
+  /** Thư mục/nhóm trong client gốc (đã chuẩn hoá `/`); null = không có. */
+  groupPath: string | null
+  protocol: HostProtocol
+  /** Đường dẫn key trong client gốc — chỉ để hiện cho user biết, KHÔNG tự đọc file (.ppk cần chuyển đổi). */
+  keyPath: string | null
+}
+
+export interface ClientImportPreviewDto {
+  format: ClientImportFormat
+  /** Tên file / "Registry" — để nhãn nhóm mặc định nói được nguồn. */
+  source: string
+  drafts: ClientImportDraftDto[]
+  warnings: string[]
+}
+
+export interface ClientImportResultDto {
+  hostsImported: number
+  /** Trùng host đã có (cùng hostname + port + user) → bỏ qua, không tạo bản thứ hai. */
+  skipped: number
+  groupNames: string[]
+  warnings: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Kiểm kê fleet (CMDB nhẹ) — facts thu qua SSH, lưu inventory.db
+// ---------------------------------------------------------------------------
+
+export interface HostFactsDto {
+  hostname: string | null
+  /** PRETTY_NAME của /etc/os-release. */
+  os: string | null
+  kernel: string | null
+  arch: string | null
+  cpuCount: number | null
+  memTotalMb: number | null
+  /** % đã dùng của phân vùng gốc `/`. */
+  diskRootPct: number | null
+  uptimeSec: number | null
+  ipv4: string[]
+  /** Cổng TCP đang lắng nghe (unique, tăng dần). */
+  listenPorts: number[]
+  /** kvm / vmware / lxc / docker… — null khi máy thật hoặc không dò được. */
+  virt: string | null
+  rebootRequired: boolean
+  /** Phiên bản phần mềm thấy được: php, nginx, apache, mysql, node, docker, python. Thiếu = không cài. */
+  versions: Record<string, string>
+}
+
+export interface InventoryRowDto {
+  hostId: string
+  collectedAt: number
+  facts: HostFactsDto
+  /** Lần thu trước (để tô ô đã đổi) — null khi mới thu lần đầu. */
+  previous: HostFactsDto | null
+  previousAt: number | null
+}
+
+export interface InventoryCollectResultDto {
+  hostId: string
+  ok: boolean
+  error?: string
+  row?: InventoryRowDto
+}
+
+export interface InventoryProgressDto {
+  hostId: string
+  done: number
+  total: number
 }
 
 // ---------------------------------------------------------------------------
@@ -1827,6 +2020,51 @@ export interface InfraApi {
     /** F53 — báo main tuỳ chọn khay hệ thống (đóng-về-khay, ngôn ngữ menu khay). */
     setTrayPrefs(prefs: TrayPrefsDto): void
   }
+  /** Trung tâm thông báo + đánh dấu sự kiện — mọi hệ theo dõi trong main ghi vào cùng một kho. */
+  events: {
+    list(query?: AppEventQuery): Promise<AppEventDto[]>
+    unread(): Promise<number>
+    ack(id: number): Promise<void>
+    ackAll(): Promise<void>
+    remove(id: number): Promise<void>
+    addMarker(input: MarkerInput): Promise<AppEventDto | null>
+    /** Marker (toàn fleet + của host) và alert/recover của host trong khoảng — để vẽ lên biểu đồ. */
+    timeline(hostId: string | null, fromTs: number, toTs: number): Promise<AppEventDto[]>
+    /** Sự kiện mới vừa được ghi (từ bất kỳ nguồn nào). */
+    onNew(cb: (event: AppEventDto) => void): () => void
+    /** Sau ack/xoá — payload là số chưa đọc hiện tại. */
+    onChanged(cb: (unread: number) => void): () => void
+  }
+  /** Theo dõi URL — chạy ở main mọi lúc (không cần vault mở). */
+  httpChecks: {
+    list(): Promise<HttpCheckDto[]>
+    save(input: HttpCheckInput): Promise<HttpCheckDto>
+    remove(id: string): Promise<void>
+    /** Đo ngay một check (không đợi chu kỳ). */
+    runNow(id: string): Promise<HttpCheckResultDto | null>
+    /** Kết quả của một check từ mốc `sinceTs`, cũ → mới. */
+    results(id: string, sinceTs: number): Promise<HttpCheckResultDto[]>
+    summaries(): Promise<HttpCheckSummaryDto[]>
+    onResult(cb: (result: HttpCheckResultDto) => void): () => void
+    onSummary(cb: (summary: HttpCheckSummaryDto) => void): () => void
+  }
+  /** Kiểm kê fleet — facts mỗi host thu qua SSH (kênh exec riêng, xuyên login-script). */
+  inventory: {
+    /** Bản thu gần nhất của mọi host còn trong kho (kèm bản trước để so). */
+    list(): Promise<InventoryRowDto[]>
+    /** Thu facts các host (song song có giới hạn); tiến độ qua onProgress. */
+    collect(hostIds: string[]): Promise<InventoryCollectResultDto[]>
+    /** Xuất bảng gần nhất ra CSV (hộp thoại lưu file). */
+    exportCsv(): Promise<{ ok: boolean; path?: string; message: string }>
+    remove(hostId: string): Promise<void>
+    onProgress(cb: (p: InventoryProgressDto) => void): () => void
+  }
+  /** Sổ tay vận hành — phần RIÊNG của user (sổ tay có sẵn nằm trong renderer, không cần IPC). Cần vault mở. */
+  runbooks: {
+    listCustom(): Promise<import('./runbooks').Runbook[]>
+    saveCustom(runbook: import('./runbooks').Runbook): Promise<import('./runbooks').Runbook[]>
+    deleteCustom(id: string): Promise<import('./runbooks').Runbook[]>
+  }
   data: {
     listShells(): Promise<ShellProfile[]>
     listGroups(): Promise<GroupDto[]>
@@ -1930,6 +2168,12 @@ export interface InfraApi {
   importer: {
     /** Mở dialog chọn file ssh_config rồi import. null = user huỷ. */
     sshConfig(): Promise<SshConfigImportResult | null>
+    /** Chọn file của client khác (.reg PuTTY, .mxtsessions, WinSCP.ini, .csv Termius) → xem trước. null = huỷ/không nhận ra. */
+    clientPick(): Promise<ClientImportPreviewDto | null>
+    /** Windows: đọc thẳng PuTTY từ Registry (HKCU\Software\SimonTatham\PuTTY\Sessions). null ở hệ khác hoặc không có session. */
+    clientPuttyRegistry(): Promise<ClientImportPreviewDto | null>
+    /** Ghi các draft đã tick vào vault. */
+    clientCommit(drafts: ClientImportDraftDto[], source: string): Promise<ClientImportResultDto>
     /** F05 — các tài khoản DigitalOcean đã lưu (chỉ nhãn; token thật không bao giờ qua IPC). */
     doConfig(): Promise<DoConfigDto>
     /** Thêm/đổi tên tài khoản DigitalOcean; token mã hoá DEK trong vault. */

@@ -1,4 +1,5 @@
 import { BrowserWindow, Notification, ipcMain, type WebContents } from 'electron'
+import { recordEvent } from './events'
 import {
   COLUMNS_SQL,
   INDEXES_SQL,
@@ -124,6 +125,14 @@ export function registerReplicationIpc(): () => void {
     const label = alert.replicaLabel ? `${pairName} · ${alert.replicaLabel}` : pairName
     const dto: ReplAlertDto = { ...alert, label, text: formatReplAlertText({ ...alert, label }) }
     broadcast(IPC.REPL_ALERT, dto)
+    // Trung tâm thông báo: replication không gắn một host cụ thể (cụm master + slave) → hostId null
+    recordEvent({
+      kind: dto.kind === 'breach' ? 'alert' : 'recover',
+      source: 'replication',
+      severity: dto.kind === 'breach' ? 'warning' : 'info',
+      hostId: null,
+      title: dto.text
+    })
     if (dto.kind === 'breach' && settings.osNotify && Notification.isSupported()) {
       const notification = new Notification({
         title: 'Infra Companion — replication',

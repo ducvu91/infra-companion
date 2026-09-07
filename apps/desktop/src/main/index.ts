@@ -15,6 +15,10 @@ import { registerKnownHostsIpc } from './ipc/knownHosts'
 import { registerDiagIpc } from './ipc/diag'
 import { disposeLogTails, registerLogTailIpc } from './ipc/logTail'
 import { registerMonitorIpc } from './ipc/monitor'
+import { registerEventsIpc } from './ipc/events'
+import { registerHttpChecksIpc, startHttpChecks } from './ipc/httpChecks'
+import { registerInventoryIpc } from './ipc/inventory'
+import { registerRunbooksIpc } from './ipc/runbooks'
 import { registerWatcherIpc } from './ipc/watcher'
 import { registerHostToolsIpc } from './ipc/hostTools'
 import { registerReplicationIpc } from './ipc/replication'
@@ -276,6 +280,11 @@ registerAiIpc()
 registerNetToolsIpc()
 registerSyncIpc()
 registerMarketplaceIpc()
+// Kho sự kiện đăng ký TRƯỚC các hệ theo dõi: chúng gọi recordEvent() ngay từ alert đầu tiên
+const disposeEvents = registerEventsIpc()
+const disposeHttpChecks = registerHttpChecksIpc()
+const disposeInventory = registerInventoryIpc()
+registerRunbooksIpc()
 const disposeMonitor = registerMonitorIpc()
 const disposeWatcher = registerWatcherIpc()
 registerHostToolsIpc()
@@ -323,6 +332,8 @@ void app.whenReady().then(() => {
   // Local dev: dọn tiến trình (nginx/php-cgi) còn sót từ lần chạy trước — phải chạy SAU
   // whenReady vì cần userData, và TRƯỚC khi user kịp bấm start bất cứ gì.
   void localDev.initIfEnabled()
+  // Theo dõi URL: chạy độc lập với vault (URL không phải bí mật) — bật timer ngay khi app sẵn sàng
+  startHttpChecks()
 
   app.on('activate', () => {
     // mac: bấm icon Dock khi cửa sổ đang ẩn trong khay → hiện lại, không tạo cửa sổ thứ hai
@@ -359,6 +370,9 @@ app.on('before-quit', (event) => {
   disposeFonts()
   flushSecretClipboard()
   disposeLogTails()
+  disposeHttpChecks()
+  disposeInventory()
+  disposeEvents()
 
   // Đẩy blob sync lần cuối TRƯỚC khi lock vault (`exportSnapshot` cần DEK), và nằm trong
   // cùng cửa sổ chờ QUIT_GRACE_MS: một thư mục mạng treo không được giữ app lại mãi.

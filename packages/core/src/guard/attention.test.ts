@@ -94,4 +94,25 @@ describe('collectAttention', () => {
     )
     expect(new Set(items.map((i) => i.id)).size).toBe(2)
   })
+
+  test('URL: chỉ check ĐANG BÁO mới lên dải, kèm lý do lần đo cuối; fail lẻ chưa đủ thì không', () => {
+    const items = collectAttention(
+      input({
+        httpChecks: [
+          { id: 'c1', label: 'example.com' },
+          { id: 'c2', label: 'api.example.net' },
+          { id: 'c3', label: 'chưa đo' }
+        ],
+        httpState: {
+          c1: { alerting: true, last: { error: 'HTTP 502 (mong 200-399)' } },
+          c2: { alerting: false, last: { error: 'hết giờ sau 10000ms' } }
+        }
+      })
+    )
+    expect(items).toEqual([{ kind: 'http-down', id: 'http:c1', label: 'example.com', detail: 'HTTP 502 (mong 200-399)' }])
+  })
+
+  test('không truyền phần URL (Dashboard cũ) → không ảnh hưởng', () => {
+    expect(collectAttention(input({ httpChecks: undefined, httpState: undefined }))).toEqual([])
+  })
 })

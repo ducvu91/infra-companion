@@ -4,6 +4,7 @@ import { TunnelService } from '@infra/core'
 import { IPC, pickAutoStartRules, type TunnelRuleDto, type TunnelRuleInput } from '@infra/shared'
 import { getVault, touchActivity } from './vault'
 import { makeHostKeyVerifier, prepareConnection } from './connection'
+import { recordEvent } from './events'
 
 /**
  * Một TunnelService duy nhất cho cả app, ở scope module (không nằm trong `registerTunnelsIpc`) để
@@ -90,9 +91,36 @@ export async function ensureTunnelRunning(sender: WebContents, ruleId: string): 
 
 /** CRUD tunnel rules + start/stop runtime. Trả về hàm dispose. */
 export function registerTunnelsIpc(): () => void {
+  /** Trạng thái lần trước theo rule — chỉ ghi sự kiện khi RƠI vào lỗi hoặc THOÁT khỏi lỗi, không ghi mỗi lần bật/tắt tay. */
+  const lastStatus = new Map<string, string>()
+  const ruleInfo = (id: string): { label: string; hostId: string | null } => {
+    try {
+      const rule = getVault().getTunnel(id)
+      return rule ? { label: rule.label || `:${rule.bindPort}`, hostId: rule.hostId } : { label: id, hostId: null }
+    } catch {
+      return { label: id, hostId: null } // vault khoá — vẫn ghi được sự kiện, chỉ thiếu tên đẹp
+    }
+  }
+
   service.on('state', (state) => {
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(IPC.TUNNELS_EVENT, state)
+    }
+    const prev = lastStatus.get(state.ruleId)
+    lastStatus.set(state.ruleId, state.status)
+    if (state.status === 'error' && prev !== 'error') {
+      const info = ruleInfo(state.ruleId)
+      recordEvent({
+        kind: 'alert',
+        source: 'tunnel',
+        severity: 'warning',
+        hostId: info.hostId,
+        title: `⚠ Tunnel [${info.label}] lỗi`,
+        detail: state.detail ?? null
+      })
+    } else if (state.status === 'active' && prev === 'error') {
+      const info = ruleInfo(state.ruleId)
+      recordEvent({ kind: 'recover', source: 'tunnel', severity: 'info', hostId: info.hostId, title: `✅ Tunnel [${info.label}] chạy lại` })
     }
   })
 

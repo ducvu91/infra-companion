@@ -1669,6 +1669,18 @@ export class VaultService {
       .run(key, value)
   }
 
+  /**
+   * Meta dạng chuỗi cho dữ liệu người dùng KHÔNG phải bí mật (sổ tay vận hành riêng…) — lưu thường,
+   * không mã hoá DEK. Tuyệt đối không để mật khẩu/token vào đây; bí mật đi đường `*_secret:<id>`.
+   */
+  readMetaValue(key: string): string | null {
+    return this.readMeta(key)
+  }
+
+  writeMetaValue(key: string, value: string): void {
+    this.writeMeta(key, value)
+  }
+
   private toGroupDto(row: GroupRow): GroupDto {
     return {
       id: row.id,

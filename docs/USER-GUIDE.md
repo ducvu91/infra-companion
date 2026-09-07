@@ -482,6 +482,27 @@ Connect to a **graphical desktop**, tunneling through your SSH jump hosts when n
 
 ---
 
+## 11D. URL checks — *All features* → 🌐 URL checks
+
+**What it is**: synthetic HTTP monitoring from your machine. The uptime watcher (11B) only knows whether a TCP port opens; a web fleet behind a load balancer fails with a 502, a blank page or an expiring certificate while the port stays open. A URL check asks the real questions on a schedule, **even while the vault is locked** (URLs are not secrets; the configuration lives in `http-checks.json` next to the vault, results in `checks.db`).
+
+- **+ New URL**: the URL (http or https), an optional name, GET or HEAD, the **accepted status** set (`200-399` default; `200`, `2xx`, `200,301` also work — redirects are not followed, so a 301 is a status of its own), an optional **keyword** the page must contain (GET only, first 64 KB), interval (30 s – 24 h), timeout, **consecutive failures before alerting** (default 2, so one blip is not an alert), and an optional linked host so the alert lands on that host's charts.
+- **Pin IP**: connect to this IP while Host and SNI still follow the URL — the same trick as *Point a domain at a server* (16D). One check per backend behind the load balancer tells you *which* machine is failing while the LB still answers 200 from the others, and the HTTPS certificate is still verified against the real name.
+- **TLS**: a certificate with **under 14 days** left counts as a failure even if the page loads; the reason says how many days are left (or how long ago it expired).
+- **Alerts** go to a toast, an OS notification and the Monitoring webhook (same settings as 11), are recorded in **Notifications** (11E), and appear on the Dashboard's *Needs attention* strip while the check is alerting. The first successful probe afterwards records a recovery.
+- Each row shows the last result (time, status, latency, error), 24h uptime %, average latency, certificate days left; click a row for the **24h latency chart** (red dots at the bottom are failures). *Check now* probes immediately; results are kept 30 days.
+
+**Test**: add `https://example.com/` → within a few seconds the row turns green with a latency; edit the accepted status to `500` → after two probes the row turns red, a toast and a Notifications entry appear and the Dashboard strip lists *URL failing: example.com*; set it back → a recovery is recorded. Add a second check for the same URL with **Pin IP** set to one backend's address → the certificate still verifies and the row shows `→ <ip>`.
+
+## 11E. Notifications & event markers — 🔔 in the status bar
+
+**What it is**: one place where every alert the app raises is **kept**, instead of only flashing as a toast that is gone by the morning. Sources: Monitoring thresholds, replication lag/thread alerts, the uptime watcher going down or coming back, a tunnel falling into error (and recovering), URL checks. The bell in the status bar shows the **unread** count in orange.
+
+- **The list** is grouped by day (*Today*, *Yesterday*, dates), newest first, with a coloured dot (red critical, orange warning, green recovery, blue marker), the source icon, the host, the detail and the time. Filter by source, tick *Unread only*, ✓ acknowledges one entry, **Mark all read** clears the count, ✕ deletes. Also available as a tab (⊞) or from the palette. Alerts are kept 30 days.
+- **Event markers**: the row at the top adds a 📌 marker — "Deploy v2.3", "Restarted nginx" — for the **whole fleet** or a chosen host. Markers appear as **dashed vertical lines on every metrics chart** (a host's 📈 history and the inline chart on its Monitoring card), together with that host's own alerts (red/orange) and recoveries (green), so a CPU or RAM spike can be matched to what happened just before it. Hover a line to read it. You can also add a marker straight from a host's history window (*＋ Mark now*) and see the events of the range listed under the charts; markers are kept 180 days.
+
+**Test**: stop a host the watcher is checking → the bell shows 1 and the entry reads *not responding* with the address in the detail; start it again → a green recovery entry; ✓ the alert → the count drops. Add a marker "test deploy" for a monitored host → open its 📈 history → a blue dashed line at the current time on every chart, and the marker in the *Events in range* list; ✕ removes it.
+
 ## 11C. MySQL/MariaDB replication — `⋯` → 🔁 Replication master/slave
 
 Answers the 2 a.m. question: **is the slave behind, by how much, why, and what do I type now?** Also has **⊞ Open in tab**.
@@ -720,6 +741,12 @@ Each machine becomes a host at its **public IP**, falling back to the private IP
 - **The group is reused.** Imported hosts go into a group you pick, or into a per-provider default (*DigitalOcean*, *AWS*, *GCP*, *Azure*) — found again on the next run, not created twice. Leave the SSH user or key empty to inherit them from the group, which is the practical way to set auth once for the whole batch (default users differ: DO/GCP images tend to use `root`, AWS `ec2-user`/`ubuntu`, Azure `azureuser`).
 - **Accounts are kept only after they work.** Every account is saved under a name you choose, its credentials **encrypted in the vault** (same treatment as the AI API key), never entering the UI process — and only after a fetch with it has actually succeeded, so mistyped credentials can't become a saved account. *Delete this account* forgets its credentials with it.
 
+### 15J. Import from another SSH client — Hosts `⋯` → *Import from PuTTY / MobaXterm / WinSCP / Termius…*
+
+**What it is**: the first thing you need when moving from another client. **Choose file…** reads a PuTTY `.reg` export (Regedit → export `HKCU\Software\SimonTatham\PuTTY\Sessions`; UTF-16 files are fine), a MobaXterm `.mxtsessions` export, `WinSCP.ini` (Tools → Export/Backup) or a Termius CSV export — any CSV with a hostname column is accepted, headers like `Label`, `Hostname/IP`, `Port`, `Username`, `Groups` are recognised. On Windows, **Read PuTTY from the Registry** skips the export step. A **preview** lists every host found, grouped by the folders of the original client; tick what you want and press **Import**. Nothing is written before that. Folders become groups (reused if a group of that name exists), **duplicates** already in the vault (same address, port and user) are skipped, **passwords are never read** from the other client (they use their own encryption), and keys only show their path (🔑) so you can import them yourself — a `.ppk` must be converted to OpenSSH with PuTTYgen first. Telnet, RDP and VNC sessions keep their protocol; FTP/WebDAV/S3 entries are skipped with a warning.
+
+**Test**: export a couple of PuTTY sessions to a `.reg` file → Choose file → the preview lists them with `user@host:port`; untick one → Import → the ticked hosts appear in a new group named after the source and the date; run the import again → the toast says they were skipped as duplicates.
+
 ### 15F. Watch a log — `⋯` → Watch a log
 
 Pick a host and a path, press Start, and the lines arrive here instead of in a terminal tab. Filter by plain text or `/regex/`; **Invert** keeps the lines that *don't* match, which is how you push routine noise out of the way; matches are highlighted in place.
@@ -727,6 +754,8 @@ Pick a host and a path, press Start, and the lines arrive here instead of in a t
 It runs **`tail -F`**, not `-f`. That difference matters at midnight: logrotate renames the file and creates a new one, `-f` keeps following the old inode, and the panel then looks perfectly alive while never showing another line again.
 
 It keeps the last **5000 lines** — this is a window for watching, not an archive (session logging is the archive). Follow-the-bottom switches itself off the instant you scroll up, so reading something older doesn't yank you back down; scroll to the bottom to re-arm it. Closing the panel stops the command on the server.
+
+**Several hosts at once** (new): the machine picker takes **several ticks**. One path, N machines → N `tail -F` sessions whose lines merge in arrival order, each prefixed with the `[machine]` in a colour fixed per host for the session; chips above the log show each session's state (starting / running / closed / error). The filter applies to the **line content**, not the prefix, so `/500/` never matches a machine name. Built for "which app server behind the load balancer is throwing the 500s". Stop closes every session.
 
 ### 15G. Scheduled jobs — `⋯` → Scheduled jobs
 
@@ -792,6 +821,23 @@ The result reads top-down, widest first:
 > **Read-only and offline, deliberately.** It never refreshes package metadata — that needs root and writes to the machine, which turns a diagnostic into a change. So the results are exactly as fresh as each machine's own last cache refresh. And there is **no button to install anything**: patching is something you want to be watching, and a "patch the whole fleet" button only has to be misclicked once.
 
 > On RHEL-family machines this needs `dnf -C` explicitly: a plain `dnf check-update` quietly re-downloads repository metadata when the cache has expired, which turns an offline read into a network round trip and can take minutes on a box with several repos.
+
+### 15L. Runbooks — `⋯` → 📖 Runbooks
+
+**What it is**: the steps for jobs you do every few months and re-research every time, kept inside the app. Built-in runbooks cover: whitelist or block an IP (**iptables-services**, **firewalld**, **ufw**, **nftables**, **fail2ban** — pick your system in the tabs), add a cron job, restrict a path to a few IPs in **nginx** or **Apache** (including the real-IP caveat behind a load balancer), add an nginx or Apache **virtual host**, issue and renew **Let's Encrypt** certificates, **harden SSH** without locking yourself out, add a **sudo user** with a key, **disk full**, **systemd** basics, **MySQL** database/user plus dump and restore, nginx **access-log** analysis, **swap**, **listening ports**, time and **NTP**, **Docker** basics, and a five-minute **security check**.
+
+- Each runbook opens with **Read before you start** (red box) — e.g. keep a second SSH session open, add the live `iptables -I` rule before touching the file, never `ufw enable` before allowing SSH.
+- **Variables**: commands use `{{ip}}`, `{{port}}`, `{{domain}}`, `{{user}}`…; fill them once at the top and every command in the runbook updates. Empty ones stay as `{{…}}` so you see what still needs a value.
+- Every command has **Copy** and **Send** — Send types the command into the connected terminal of the current tab (it refuses while a variable is still empty). Steps that can drop your SSH connection or destroy data are marked **⚠ Dangerous** and ask for confirmation before copying or sending.
+- **My runbooks**: *+ New runbook* opens an editor with title, category, tags, summary, warnings and the steps in a small text format — `## Step title`, lines starting with `$ ` are the command (consecutive `$` lines form one block), other lines are notes, `!!` at the top of a step marks it dangerous, variables are written `{{ip}}`. *Copy to edit* on a built-in runbook (for the system tab you are viewing) is the quickest way to start one adapted to your infrastructure. Your runbooks are stored in the vault's meta table (not encrypted; do not put passwords in them) and appear while the vault is unlocked. Built-in content is in Vietnamese for now.
+
+**Test**: open *Whitelist một IP qua firewall* → the **firewalld** tab → type an IP in `{{ip}}` → every command now shows it → *Copy* on step 2 puts the filled command on the clipboard; on the **iptables-services** tab the last step (`systemctl restart iptables`) is red and asks for confirmation. Open an SSH tab, come back, *Send* on `iptables -L INPUT -n --line-numbers` → the command runs in that pane. *+ New runbook* → paste two `##` steps → the counter shows *2 steps* → Save → it appears under *My runbooks* with 📌; lock the vault → the section shows the locked note.
+
+### 15K. Fleet inventory — *All features* → 📇 Fleet inventory
+
+**What it is**: a light asset register. **Collect** runs **one read-only command** on each ticked host (no install, no `sudo`, up to 4 machines in parallel, through the login script like every other diagnostic) and fills a wide table: OS (`/etc/os-release`), kernel, architecture, CPU count, RAM, root disk usage (coloured from 75 %), uptime, IPv4 addresses, virtualisation, whether a **reboot is pending**, the versions of PHP, nginx, Apache, MySQL/MariaDB, Node, Docker and Python, and the **listening TCP ports**. The **search box** matches every column with all words required — `php 7.4` finds machines still on PHP 7.4, `ubuntu 20` the ones due for an upgrade, `:3306` anything listening on MySQL, `reboot` whatever needs a restart. Cells that **changed since the previous collection** are highlighted; hover to see the old value (a patch run that moved the kernel and PHP shows up immediately). The last 20 snapshots per host are kept in `inventory.db`; ▶ on a row re-collects that host, ✕ forgets it, **Export CSV** saves the table. Linux hosts only (the command relies on `/proc`, `df`, `ss`/`netstat`).
+
+**Test**: tick two hosts → Collect → progress `1/2`, `2/2` → both rows appear; type `php` → only hosts with PHP remain; upgrade a package on one host and collect again → the changed version cell turns yellow and the tooltip shows `old → new`; Export CSV → a file with one row per host.
 
 ### 15C. Trusted fingerprints — `⋯` → Trusted fingerprints
 
@@ -1070,4 +1116,8 @@ Four tabs, one for each question you actually arrive with.
 - **Point a domain at a server** needs a **Chromium** browser and does nothing behind a system proxy; it covers browsers only, not Postman or database clients — see §16D.
 - **Replication monitoring** covers **MySQL/MariaDB position-based replication**. GTID sets aren't compared yet (only binlog file/position), PostgreSQL streaming replication isn't supported, and there's no lag history chart or detached window yet. Per-pair alert thresholds exist in the backend but the UI only exposes the global defaults. Tunnel mode needs a **local-forward (L)** tunnel — SOCKS (D) and remote (R) tunnels have no local end to attach to — and requires a MySQL user/password. See §11C.
 - **Tool tabs aren't saved in a workspace** (Monitoring, Compare, Local dev, Tunnels, Processes, Services, AI troubleshooter, Replication) — they carry no session, so they're one click to reopen; only terminal and SFTP tabs are restored. The **detached** Monitoring/Tunnels windows also don't remember their size and position between runs yet.
-- Not yet available: a self-hosted **team server**, **cloud import** (AWS/GCP…), a **Docker/K8s browser** — see [../ROADMAP.md](../ROADMAP.md).
+- **URL checks** do not follow redirects, send no cookies or authentication, and read at most 64 KB of the body for the keyword; they probe from this machine only.
+- **Fleet inventory** is Linux-only (it reads `/proc`, `df`, `ss`/`netstat`) and version columns only cover PHP, nginx, Apache, MySQL/MariaDB, Node, Docker and Python.
+- **Import from other clients** never reads their stored passwords or key files; PuTTY `.ppk` keys must be converted to OpenSSH before importing in *Keys*. SecureCRT is not supported yet.
+- **Multi-host tail** opens one SSH connection per machine; keep the list to what the gate can take.
+- Not yet available: a self-hosted **team server**, a **Docker/K8s browser** — see [../ROADMAP.md](../ROADMAP.md).

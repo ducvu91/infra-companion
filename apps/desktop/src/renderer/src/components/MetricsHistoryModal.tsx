@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react'
-import type { MetricHistoryPointDto } from '@infra/shared'
-import { Modal } from './ui'
+import { markerX, toChartMarkers, type AppEventDto, type ChartMarker, type MetricHistoryPointDto } from '@infra/shared'
+import { useSettingsStore } from '../stores/settings'
+import { Button, Modal, TextInput } from './ui'
 import { useT } from '../i18n'
+
+const LOCALES = { vi: 'vi-VN', en: 'en-US', ja: 'ja-JP' } as const
+
+/** Màu vạch sự kiện theo tone — biến CSS của theme để đổi màu cùng bảng màu tuỳ chỉnh. */
+const TONE_COLOR: Record<ChartMarker['tone'], string> = {
+  accent: 'var(--c-accent)',
+  warning: 'var(--c-warning)',
+  danger: 'var(--c-danger)',
+  success: 'var(--c-success)'
+}
 
 type Range = '1h' | '24h'
 
@@ -16,16 +27,27 @@ const REFRESH_MS = 60_000
 /** F32 — Lịch sử metrics 1 host: 3 chart Load/RAM/Disk (SVG tự vẽ, thang 0-100%). */
 export function MetricsHistoryModal({ hostId, label, onClose }: { hostId: string; label: string; onClose: () => void }) {
   const t = useT()
+  const locale = LOCALES[useSettingsStore((s) => s.language)]
   const [range, setRange] = useState<Range>('1h')
   const [points, setPoints] = useState<MetricHistoryPointDto[] | null>(null)
+  // Sự kiện trong khoảng (marker của user + alert/recover của host) → vạch trên biểu đồ + danh sách dưới
+  const [events, setEvents] = useState<AppEventDto[]>([])
+  const [markerTitle, setMarkerTitle] = useState('')
+  const [reloadTick, setReloadTick] = useState(0)
+  // Khoảng đang hỏi (now - range → now) — trục X của chart theo đúng khoảng này, không theo dữ liệu
+  const [window_, setWindow] = useState<{ from: number; to: number } | null>(null)
 
   useEffect(() => {
     let alive = true
     const load = (): void => {
       const now = Date.now()
       const cfg = RANGE_CFG[range]
+      setWindow({ from: now - cfg.ms, to: now })
       void window.infra.monitor.queryHistory(hostId, now - cfg.ms, now, cfg.res).then((rows) => {
         if (alive) setPoints(rows)
+      })
+      void window.infra.events.timeline(hostId, now - cfg.ms, now).then((rows) => {
+        if (alive) setEvents(rows)
       })
     }
     load()
@@ -34,10 +56,24 @@ export function MetricsHistoryModal({ hostId, label, onClose }: { hostId: string
       alive = false
       clearInterval(timer)
     }
-  }, [hostId, range])
+  }, [hostId, range, reloadTick])
 
   const cfg = RANGE_CFG[range]
   const hasData = points !== null && points.length > 0
+  const markers = toChartMarkers(events)
+
+  const addMarker = async (): Promise<void> => {
+    const title = markerTitle.trim()
+    if (!title) return
+    await window.infra.events.addMarker({ hostId, title })
+    setMarkerTitle('')
+    setReloadTick((n) => n + 1)
+  }
+
+  const removeEvent = async (id: number): Promise<void> => {
+    await window.infra.events.remove(id)
+    setReloadTick((n) => n + 1)
+  }
 
   return (
     <Modal title={`📈 ${t('monitor.historyTitle', { host: label })}`} onClose={onClose}>
@@ -63,12 +99,55 @@ export function MetricsHistoryModal({ hostId, label, onClose }: { hostId: string
         {hasData && (
           <div className="space-y-3">
             {/* Load %/CPU vượt được 100% (server bận 300-400%+) → thang tự giãn theo dữ liệu */}
-            <MetricChart label={`Load (${t('monitor.loadNorm')})`} points={points} field="loadPct" resMs={cfg.res * 60_000} autoScale />
-            <MetricChart label="CPU" points={points} field="cpuPct" resMs={cfg.res * 60_000} />
-            <MetricChart label="CPU steal" points={points} field="stealPct" resMs={cfg.res * 60_000} />
-            <MetricChart label="RAM" points={points} field="memPct" resMs={cfg.res * 60_000} />
-            <MetricChart label="Disk" points={points} field="diskPct" resMs={cfg.res * 60_000} />
-            <MetricChart label={t('monitor.metricConn')} points={points} field="conns" resMs={cfg.res * 60_000} autoScale unit="" />
+            <MetricChart label={`Load (${t('monitor.loadNorm')})`} points={points} field="loadPct" resMs={cfg.res * 60_000} autoScale markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+            <MetricChart label="CPU" points={points} field="cpuPct" resMs={cfg.res * 60_000} markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+            <MetricChart label="CPU steal" points={points} field="stealPct" resMs={cfg.res * 60_000} markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+            <MetricChart label="RAM" points={points} field="memPct" resMs={cfg.res * 60_000} markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+            <MetricChart label="Disk" points={points} field="diskPct" resMs={cfg.res * 60_000} markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+            <MetricChart label={t('monitor.metricConn')} points={points} field="conns" resMs={cfg.res * 60_000} autoScale unit="" markers={markers} rangeFrom={window_?.from} rangeTo={window_?.to} />
+          </div>
+        )}
+
+        {/* Đánh dấu sự kiện ngay tại đây (deploy, restart…) + danh sách sự kiện trong khoảng đang xem */}
+        <form
+          className="mt-3 flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void addMarker()
+          }}
+        >
+          <TextInput value={markerTitle} onChange={(e) => setMarkerTitle(e.target.value)} placeholder={t('events.markerPh')} className="flex-1" />
+          <Button type="submit" variant="primary" className="shrink-0" disabled={!markerTitle.trim()}>
+            {t('monitor.markNow')}
+          </Button>
+        </form>
+        {events.length > 0 && (
+          <div className="mt-2">
+            <div className="text-subtle mb-1 text-[10px] font-semibold tracking-wider uppercase">{t('monitor.timeline')}</div>
+            <div className="max-h-32 space-y-0.5 overflow-y-auto">
+              {[...events].reverse().map((ev) => {
+                const tone = toChartMarkers([ev])[0]?.tone ?? 'accent'
+                return (
+                  <div key={ev.id} className="group flex items-center gap-2 text-[11px]">
+                    <span className="size-2 shrink-0 rounded-full" style={{ background: TONE_COLOR[tone] }} />
+                    <span className="text-subtle shrink-0 tabular-nums">
+                      {new Date(ev.ts).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <span className="text-muted min-w-0 flex-1 truncate">{ev.title}</span>
+                    {ev.kind === 'marker' && (
+                      <button
+                        type="button"
+                        className="text-subtle hover:text-danger shrink-0 opacity-0 group-hover:opacity-100"
+                        title={t('common.delete')}
+                        onClick={() => void removeEvent(ev.id)}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           </div>
         )}
       </div>
@@ -89,7 +168,10 @@ export function MetricChart({
   resMs,
   autoScale = false,
   unit = '%',
-  compact = false
+  compact = false,
+  markers = [],
+  rangeFrom,
+  rangeTo
 }: {
   label: string
   points: MetricHistoryPointDto[]
@@ -98,10 +180,20 @@ export function MetricChart({
   autoScale?: boolean
   unit?: string
   compact?: boolean
+  /** Vạch sự kiện (marker deploy của user, alert/recover) — hover vào vạch để đọc nhãn. */
+  markers?: ChartMarker[]
+  /**
+   * Khoảng thời gian của TRỤC X. Không truyền thì lấy theo dữ liệu (điểm đầu → điểm cuối) — như
+   * vậy nếu monitoring dừng lúc 10:10 thì trục kết thúc ở 10:10 và marker đặt lúc 10:52 rơi ra
+   * ngoài, không vẽ được (bug đã dính). Nơi gọi biết mình đang hỏi "1 giờ qua" thì truyền vào để
+   * trục đúng là 1 giờ qua, phần không có dữ liệu để trống — đó mới là sự thật.
+   */
+  rangeFrom?: number
+  rangeTo?: number
 }) {
   if (!points.some((p) => p[field] !== null)) return null
-  const from = points[0]!.ts
-  const to = points[points.length - 1]!.ts
+  const from = rangeFrom ?? points[0]!.ts
+  const to = rangeTo ?? points[points.length - 1]!.ts
   const span = Math.max(to - from, 1)
   // Trần thang Y: 100 hoặc max dữ liệu làm tròn lên bậc 50 (vd 368% → 400)
   const dataMax = autoScale ? points.reduce((m, p) => Math.max(m, p[field] ?? 0), 0) : 0
@@ -159,6 +251,18 @@ export function MetricChart({
         {segments.map((pts, i) => (
           <polyline key={i} points={pts} fill="none" stroke="#7aa2f7" strokeWidth="1.2" vectorEffect="non-scaling-stroke" />
         ))}
+        {/* Vạch sự kiện: đứt nét dọc suốt chiều cao + chấm ở đỉnh; <title> là tooltip gốc của SVG */}
+        {markers.map((m, i) => {
+          const x = markerX(m.ts, from, to)
+          if (x === null) return null
+          return (
+            <g key={`m${i}`} style={{ color: TONE_COLOR[m.tone] }}>
+              <title>{`${fmt(m.ts)} — ${m.label}`}</title>
+              <line x1={x} y1="0" x2={x} y2="30" stroke="currentColor" strokeWidth="1" strokeDasharray="3 2" vectorEffect="non-scaling-stroke" />
+              <circle cx={x} cy="1.5" r="1.1" fill="currentColor" />
+            </g>
+          )
+        })}
         {segments.length === 0 && points.length === 1 && (
           // 1 điểm duy nhất → chấm thay vì đường
           <circle cx="50" cy="15" r="1" fill="#7aa2f7" />

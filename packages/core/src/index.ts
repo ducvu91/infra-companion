@@ -69,6 +69,30 @@ export { HysteresisStates, binaryZone, feedHysteresis, newHysteresisState, numer
 export type { HysteresisOptions, HysteresisOutcome, HysteresisState, HysteresisZone } from './monitor/hysteresis'
 export { MetricsStore } from './monitor/MetricsStore'
 export type { MetricHistoryPoint, MetricHistoryHost } from './monitor/MetricsStore'
+// Trung tâm thông báo + đánh dấu sự kiện: kho SQLite chung cho mọi hệ theo dõi trong main.
+export { EVENT_RETENTION_MS, EventStore, MARKER_RETENTION_MS } from './events/EventStore'
+// Theo dõi URL (synthetic HTTP monitoring): quyết định thuần + prober + kho kết quả.
+export {
+  BODY_SNIPPET_BYTES,
+  CERT_WARN_DAYS,
+  DEFAULT_EXPECT_STATUS,
+  HTTP_CHECK_LIMITS,
+  certDaysLeft,
+  consecutiveFails,
+  evaluateProbe,
+  isValidCheckUrl,
+  isValidStatusSpec,
+  labelFromUrl,
+  parseStatusSpec,
+  sanitizeHttpCheck,
+  summarizeResults
+} from './httpcheck/httpCheck'
+export type { ProbeResult } from './httpcheck/httpCheck'
+export { describeNetError, probeUrl } from './httpcheck/probe'
+export { HTTP_RESULT_RETENTION_MS, HttpCheckStore } from './httpcheck/HttpCheckStore'
+// Kiểm kê fleet (CMDB nhẹ): lệnh thu facts + parser + kho lịch sử (lọc/so lệch ở @infra/shared vì renderer dùng).
+export { FACTS_COMMAND, factsToCsv, parseFacts, splitSections } from './inventory/facts'
+export { InventoryStore, KEEP_PER_HOST } from './inventory/InventoryStore'
 // F55 — Theo dõi bất đồng bộ master ↔ slave (MySQL/MariaDB).
 export {
   READ_ONLY_SQL,
@@ -178,6 +202,18 @@ export { resolveSecret, detectSecretProvider } from './secrets/SecretsService'
 export type { SecretProvider } from './secrets/SecretsService'
 export { generateTotp, isValidTotpSecret, normalizeTotpSecret, applyTotpToken, TOTP_TOKEN } from './secrets/totp'
 export { importSshConfig, parseSshConfig } from './importers/sshConfig'
+// Nhập từ client SSH khác (PuTTY .reg / MobaXterm / WinSCP.ini / Termius CSV): parser thuần + ghi vault.
+export {
+  decodeTextFile,
+  detectClientFormat,
+  importClientHosts,
+  parseClientFile,
+  parseCsv,
+  parseMobaXterm,
+  parsePuttyReg,
+  parseTermiusCsv,
+  parseWinScpIni
+} from './importers/clientImport'
 // F05 — Cloud import (DigitalOcean): parse + ghi vault là hàm thuần, phần fetch nằm ở main.
 export { DO_DEFAULT_GROUP_NAME, importDroplets, parseDropletsPage } from './importers/digitalOcean'
 export type { DropletImportVault } from './importers/digitalOcean'

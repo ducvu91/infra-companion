@@ -17,6 +17,14 @@ import { NetToolboxModal } from './components/NetToolboxModal'
 import { MonitorModal } from './components/MonitorModal'
 import { MonitorDock } from './components/MonitorDock'
 import { BottomPanel } from './components/workbench/BottomPanel'
+import { NotificationsModal } from './components/NotificationsModal'
+import { HttpChecksModal } from './components/HttpChecksModal'
+import { ClientImportModal } from './components/ClientImportModal'
+import { InventoryModal } from './components/InventoryModal'
+import { RunbooksModal } from './components/RunbooksModal'
+import { useInventoryStore } from './stores/inventory'
+import { useEventsStore } from './stores/events'
+import { useHttpChecksStore } from './stores/httpChecks'
 import { MonitorTabView } from './components/MonitorTabView'
 import { CompareTabView } from './components/CompareTabView'
 import { LocaldevTabView } from './features/localdev/LocaldevTabView'
@@ -144,7 +152,7 @@ export default function App() {
     if (!watcherEnabled) return
     const targets = allHosts
       .filter((h) => h.protocol !== 'serial')
-      .map((h) => ({ hostId: h.id, host: h.hostname, port: h.port }))
+      .map((h) => ({ hostId: h.id, host: h.hostname, port: h.port, label: h.label }))
     if (targets.length > 0) window.infra.watcher.start(targets)
   }, [watcherEnabled, allHosts])
 
@@ -196,6 +204,15 @@ export default function App() {
     window.infra.replication.subscribe()
     // F39: kết quả sweep watcher nền → chấm xanh/đỏ ở sidebar
     const offWatcher = window.infra.watcher.onStatus((list) => useWatcherStore.getState().applyStatuses(list))
+    // Trung tâm thông báo: sự kiện mới từ mọi hệ theo dõi + số chưa đọc (chuông ở StatusBar)
+    const offEventNew = window.infra.events.onNew((ev) => useEventsStore.getState().applyNew(ev))
+    const offEventChanged = window.infra.events.onChanged((n) => useEventsStore.getState().setUnread(n))
+    void useEventsStore.getState().refreshUnread()
+    // Theo dõi URL: nạp cấu hình + tóm tắt (không cần vault) để Dashboard biết URL nào đang lỗi
+    const offHttpSummary = window.infra.httpChecks.onSummary((s) => useHttpChecksStore.getState().applySummary(s))
+    void useHttpChecksStore.getState().load()
+    // Kiểm kê fleet: tiến độ đợt thu (main gửi từng host xong)
+    const offInvProgress = window.infra.inventory.onProgress((p) => useInventoryStore.getState().applyProgress(p))
     // Local dev: trạng thái service / tiến độ tải runtime / tiến độ thao tác site (main là nguồn sự thật)
     const offLdService = window.infra.localdev.onServiceEvent((s) =>
       useLocaldevStore.getState().applyServiceEvent(s)
@@ -225,6 +242,10 @@ export default function App() {
       offAlert()
       offDetached()
       offStopped()
+      offEventNew()
+      offEventChanged()
+      offHttpSummary()
+      offInvProgress()
     }
   }, [])
 
@@ -368,6 +389,11 @@ export default function App() {
     { id: 'open-workspaces', label: t('menu.workspaces'), run: () => setModal('workspaces') },
     { id: 'open-bulk', label: t('menu.bulk'), run: () => setModal('bulk') },
     { id: 'open-monitor', label: t('menu.monitor'), run: () => setModal('monitor') },
+    { id: 'open-notifications', label: t('menu.notifications'), run: () => setModal('notifications') },
+    { id: 'open-http-checks', label: t('menu.httpChecks'), run: () => setModal('http-checks') },
+    { id: 'open-client-import', label: t('menu.clientImport'), run: () => setModal('client-import') },
+    { id: 'open-inventory', label: t('menu.inventory'), run: () => useTabsStore.getState().openToolTab('inventory') },
+    { id: 'open-runbooks', label: t('menu.runbooks'), run: () => setModal('runbooks') },
     { id: 'open-monitor-tab', label: `📊 ${t('monitor.openInTab')}`, run: () => useTabsStore.getState().openMonitorTab() },
     { id: 'open-processes', label: t('menu.processes'), run: () => setModal('processes') },
     {
@@ -571,6 +597,11 @@ export default function App() {
       {modal === 'snippets' && <SnippetsModal onClose={() => setModal(null)} />}
       {modal === 'tunnels' && <TunnelsModal onClose={() => setModal(null)} />}
       {modal === 'keys' && <KeysModal onClose={() => setModal(null)} />}
+      {modal === 'notifications' && <NotificationsModal onClose={() => setModal(null)} />}
+      {modal === 'http-checks' && <HttpChecksModal onClose={() => setModal(null)} />}
+      {modal === 'client-import' && <ClientImportModal onClose={() => setModal(null)} />}
+      {modal === 'inventory' && <InventoryModal onClose={() => setModal(null)} />}
+      {modal === 'runbooks' && <RunbooksModal onClose={() => setModal(null)} />}
       {modal === 'bulk' && <BulkRunModal onClose={() => setModal(null)} />}
       {modal === 'net' && <NetToolboxModal onClose={() => setModal(null)} />}
       {modal === 'monitor' && <MonitorModal onClose={() => setModal(null)} />}

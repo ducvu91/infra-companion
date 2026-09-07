@@ -8,7 +8,7 @@
  * Hàm thuần ở `packages/shared` (không phải core) vì renderer không được import `@infra/core`.
  */
 
-export type AttentionKind = 'host-down' | 'tunnel-error' | 'replication'
+export type AttentionKind = 'host-down' | 'tunnel-error' | 'replication' | 'http-down'
 
 export interface AttentionItem {
   kind: AttentionKind
@@ -29,6 +29,9 @@ export interface AttentionInput {
   tunnelState: Record<string, { status: string; detail?: string } | undefined>
   /** Slave đang lệch: đã do nơi gọi lọc từ store replication. */
   replicaIssues: Array<{ id: string; label: string; detail?: string }>
+  /** Theo dõi URL (tuỳ chọn — Dashboard cũ không truyền): danh sách check + tóm tắt theo id. */
+  httpChecks?: Array<{ id: string; label: string }>
+  httpState?: Record<string, { alerting: boolean; last?: { error: string | null } | null } | undefined>
 }
 
 /**
@@ -60,6 +63,14 @@ export function collectAttention(input: AttentionInput): AttentionItem[] {
 
   for (const replica of input.replicaIssues) {
     items.push({ kind: 'replication', id: `repl:${replica.id}`, label: replica.label, detail: replica.detail })
+  }
+
+  // URL: chỉ khi ĐANG BÁO (đã fail đủ số lần liên tiếp) — một lần nháy chưa đủ để lên dải
+  for (const check of input.httpChecks ?? []) {
+    const state = input.httpState?.[check.id]
+    if (state?.alerting) {
+      items.push({ kind: 'http-down', id: `http:${check.id}`, label: check.label, detail: state.last?.error ?? undefined })
+    }
   }
 
   return items
