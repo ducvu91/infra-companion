@@ -10,7 +10,8 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { saveTermSnapshot, subscribeTermData, takeTermSnapshot } from '../../lib/termBus'
 import { matchGuard } from '../../lib/commandGuard'
 import { matchesCombo } from '../../lib/shortcuts'
-import { guardScope, resolveProduction, typePhraseMatches, type CommandTarget, type GuardScope } from '@infra/shared'
+import { commandSucceeded, formatDuration, guardScope, parseOsc133, resolveProduction, typePhraseMatches, type CommandTarget, type GuardScope } from '@infra/shared'
+import { useShellMarksStore } from '../../stores/shellMarks'
 import { useTabsStore, type Pane } from '../../stores/tabs'
 import { useAiExplainStore } from '../../stores/aiExplain'
 import { useDataStore } from '../../stores/data'
@@ -237,8 +238,25 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
     const snapshot = takeTermSnapshot(pane.sessionId)
     if (snapshot) term.write(snapshot)
 
+    // F23 — Shell integration: đọc OSC 133 (A/B/C/D) do shell trên remote gửi để biết ranh giới
+    // từng lệnh + exit code. `registerOscHandler` trả true = đã xử lý, xterm không in ra màn hình.
+    // Không có shell nào gửi thì phần này im lặng hoàn toàn (không tốn gì, không hiện gì).
+    const oscDisposable = term.parser.registerOscHandler(133, (payload) => {
+      if (!useSettingsStore.getState().shellMarksEnabled) return true
+      const mark = parseOsc133(payload)
+      if (!mark) return true
+      const marks = useShellMarksStore.getState()
+      if (mark.kind === 'command-start') marks.onCommandStart(pane.sessionId)
+      else if (mark.kind === 'command-done') marks.onCommandDone(pane.sessionId, mark.exitCode, pane.subtitle ?? pane.title)
+      return true
+    })
+
     const unsubscribeData = subscribeTermData(pane.sessionId, (data) => term.write(data))
-    const dataDisposable = term.onData(handleInput)
+    const dataDisposable = term.onData((data) => {
+      // Theo dõi dòng đang gõ để biết TÊN lệnh vừa chạy (marker OSC 133 không gửi kèm lệnh)
+      if (useSettingsStore.getState().shellMarksEnabled) useShellMarksStore.getState().onInput(pane.sessionId, data)
+      handleInput(data)
+    })
     const resizeDisposable = term.onResize(({ cols, rows }) =>
       window.infra.terminal.resize(pane.sessionId, cols, rows)
     )
@@ -394,6 +412,7 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
     return () => {
       unsubscribeData()
       dataDisposable.dispose()
+      oscDisposable.dispose()
       resizeDisposable.dispose()
       selectionDisposable.dispose()
       cursorMoveDisposable.dispose()
@@ -634,6 +653,10 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
         </div>
       )}
 
+      {/* F23 — dải nhỏ góc trên phải: lệnh đang chạy (kèm đồng hồ) hoặc kết quả lệnh vừa xong.
+          Chỉ hiện khi shell trên remote thật sự gửi OSC 133 — không có thì im lặng, không quảng cáo. */}
+      <ShellMarkBadge sessionId={pane.sessionId} />
+
       {/* Auto-complete dropdown: portal ra body + fixed để không bị overflow-hidden của pane cắt.
           Xổ lên (above) khi con trỏ ở nửa dưới màn hình. */}
       {suggest &&
@@ -785,6 +808,55 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * F23 — nhãn kết quả lệnh cuối / lệnh đang chạy, dựng từ marker OSC 133.
+ *
+ * Tách thành component riêng để đồng hồ đếm giây (một `setInterval` khi đang chạy) không kéo cả
+ * TerminalPane render lại — pane có xterm bên trong, render lại là việc đắt.
+ *
+ * Không có shell nào gửi marker (`integrated === false`) thì KHÔNG hiện gì: một nhãn "chưa bật
+ * shell integration" nằm mãi ở góc mọi terminal là thứ người ta chỉ muốn tắt đi.
+ */
+function ShellMarkBadge({ sessionId }: { readonly sessionId: string }) {
+  const t = useT()
+  const enabled = useSettingsStore((s) => s.shellMarksEnabled)
+  const paneState = useShellMarksStore((s) => s.panes[sessionId])
+  const [now, setNow] = useState(Date.now())
+  const runningSince = paneState?.runningSince ?? null
+
+  useEffect(() => {
+    if (runningSince === null) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [runningSince])
+
+  if (!enabled || !paneState?.integrated) return null
+
+  if (runningSince !== null) {
+    return (
+      <div className="border-edge-strong bg-elevated/90 text-muted pointer-events-none absolute top-2 right-2 z-30 flex max-w-64 items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] shadow">
+        <span className="bg-warning size-1.5 shrink-0 animate-pulse rounded-full" />
+        <span className="shrink-0">{formatDuration(Math.max(0, now - runningSince))}</span>
+        {paneState.runningCommand && <span className="text-subtle min-w-0 truncate">{paneState.runningCommand}</span>}
+      </div>
+    )
+  }
+
+  const last = paneState.records[0]
+  if (!last) return null
+  const ok = commandSucceeded(last)
+  return (
+    <div
+      className={`border-edge-strong bg-elevated/90 pointer-events-none absolute top-2 right-2 z-30 flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] shadow ${ok ? 'text-success' : 'text-danger'}`}
+      title={t('terminal.lastCommand', { command: last.command || '—' })}
+    >
+      <span>{ok ? '✓' : `✕ ${last.exitCode}`}</span>
+      <span className="text-muted">{formatDuration(last.durationMs)}</span>
     </div>
   )
 }

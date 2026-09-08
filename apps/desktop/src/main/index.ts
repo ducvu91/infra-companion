@@ -19,6 +19,9 @@ import { registerEventsIpc } from './ipc/events'
 import { registerHttpChecksIpc, startHttpChecks } from './ipc/httpChecks'
 import { registerInventoryIpc } from './ipc/inventory'
 import { registerRunbooksIpc } from './ipc/runbooks'
+import { registerJobsIpc, startJobScheduler } from './ipc/jobs'
+import { registerSecurityIpc } from './ipc/security'
+import { registerFolderSyncIpc } from './ipc/folderSync'
 import { registerWatcherIpc } from './ipc/watcher'
 import { registerHostToolsIpc } from './ipc/hostTools'
 import { registerReplicationIpc } from './ipc/replication'
@@ -285,6 +288,9 @@ const disposeEvents = registerEventsIpc()
 const disposeHttpChecks = registerHttpChecksIpc()
 const disposeInventory = registerInventoryIpc()
 registerRunbooksIpc()
+const disposeJobs = registerJobsIpc()
+registerSecurityIpc()
+const disposeFolderSync = registerFolderSyncIpc()
 const disposeMonitor = registerMonitorIpc()
 const disposeWatcher = registerWatcherIpc()
 registerHostToolsIpc()
@@ -334,6 +340,8 @@ void app.whenReady().then(() => {
   void localDev.initIfEnabled()
   // Theo dõi URL: chạy độc lập với vault (URL không phải bí mật) — bật timer ngay khi app sẵn sàng
   startHttpChecks()
+  // Lịch chạy tự động: đọc lịch ngay (cả khi vault còn khoá); lượt nào gặp vault khoá sẽ ghi "bỏ lượt"
+  startJobScheduler()
 
   app.on('activate', () => {
     // mac: bấm icon Dock khi cửa sổ đang ẩn trong khay → hiện lại, không tạo cửa sổ thứ hai
@@ -372,6 +380,8 @@ app.on('before-quit', (event) => {
   disposeLogTails()
   disposeHttpChecks()
   disposeInventory()
+  disposeJobs()
+  disposeFolderSync()
   disposeEvents()
 
   // Đẩy blob sync lần cuối TRƯỚC khi lock vault (`exportSnapshot` cần DEK), và nằm trong

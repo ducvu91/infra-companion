@@ -15,6 +15,9 @@ import { NotificationsModal } from './NotificationsModal'
 import { HttpChecksModal } from './HttpChecksModal'
 import { InventoryModal } from './InventoryModal'
 import { RunbooksModal } from './RunbooksModal'
+import { JobsModal } from './JobsModal'
+import { SecurityAuditModal } from './SecurityAuditModal'
+import { FolderSyncModal } from './FolderSyncModal'
 import { useT } from '../i18n'
 import type { I18nKey } from '../i18n/dict'
 import type { ToolTabKind } from '../stores/tabs'
@@ -43,7 +46,10 @@ const TOOLS: Partial<Record<ToolTabKind, { icon: string; titleKey: I18nKey; rend
   notifications: { icon: '🔔', titleKey: 'events.title', render: () => <NotificationsModal embedded /> },
   'http-checks': { icon: '🌐', titleKey: 'http.title', render: () => <HttpChecksModal embedded /> },
   inventory: { icon: '📇', titleKey: 'inv.title', render: () => <InventoryModal embedded /> },
-  runbooks: { icon: '📖', titleKey: 'runbooks.title', render: () => <RunbooksModal embedded /> }
+  runbooks: { icon: '📖', titleKey: 'runbooks.title', render: () => <RunbooksModal embedded /> },
+  jobs: { icon: '⏰', titleKey: 'jobs.title', render: () => <JobsModal embedded /> },
+  security: { icon: '🛡️', titleKey: 'sec.title', render: () => <SecurityAuditModal embedded /> },
+  'folder-sync': { icon: '🔄', titleKey: 'folderSync.title', render: () => <FolderSyncModal embedded /> }
 }
 
 export function ToolTabView({ kind, active }: { kind: ToolTabKind; active: boolean }) {

@@ -372,7 +372,33 @@ export const IPC = {
   // ── Sổ tay vận hành (sổ tay riêng của user lưu trong vault meta) ─────────
   RUNBOOKS_LIST_CUSTOM: 'runbooks:list-custom',
   RUNBOOKS_SAVE_CUSTOM: 'runbooks:save-custom',
-  RUNBOOKS_DELETE_CUSTOM: 'runbooks:delete-custom'
+  RUNBOOKS_DELETE_CUSTOM: 'runbooks:delete-custom',
+
+  // ── Lịch chạy tự động (F40) ──────────────────────────────────────────────
+  JOBS_LIST: 'jobs:list',
+  JOBS_SAVE: 'jobs:save',
+  JOBS_DELETE: 'jobs:delete',
+  /** Chạy ngay một job (không đợi lịch) — để thử trước khi để nó tự chạy. */
+  JOBS_RUN_NOW: 'jobs:run-now',
+  JOBS_RUNS: 'jobs:runs',
+  /** main → renderer: một job vừa bắt đầu / vừa xong. */
+  JOBS_RUN_EVENT: 'jobs:run-event',
+
+  // ── F38: kiểm an ninh nhanh cả fleet ─────────────────────────────────────
+  SECURITY_SCAN: 'security:scan',
+  SECURITY_PROGRESS: 'security:progress',
+
+  // ── F28/F29: so lệch thư mục local ↔ remote, theo dõi và tự đẩy ──────────
+  FOLDERSYNC_LIST: 'folder-sync:list',
+  FOLDERSYNC_SAVE: 'folder-sync:save',
+  FOLDERSYNC_DELETE: 'folder-sync:delete',
+  FOLDERSYNC_PICK_LOCAL: 'folder-sync:pick-local',
+  FOLDERSYNC_SCAN: 'folder-sync:scan',
+  FOLDERSYNC_PUSH: 'folder-sync:push',
+  /** Bật/tắt theo dõi thư mục local của một cặp. */
+  FOLDERSYNC_WATCH: 'folder-sync:watch',
+  /** main → renderer: trạng thái watch / file vừa đẩy / lỗi. */
+  FOLDERSYNC_EVENT: 'folder-sync:event'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

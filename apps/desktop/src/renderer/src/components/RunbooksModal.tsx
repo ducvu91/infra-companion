@@ -15,7 +15,7 @@ import {
   type RunbookStep
 } from '@infra/shared'
 import { useRunbooksStore } from '../stores/runbooks'
-import { useTabsStore } from '../stores/tabs'
+import { terminalTargetPane, useTabsStore } from '../stores/tabs'
 import { useToastsStore } from '../stores/toasts'
 import { useVaultStore } from '../stores/vault'
 import { Button, ConfirmModal, Field, ModalOrPanel, Select, TextArea, TextInput } from './ui'
@@ -217,7 +217,7 @@ function RunbookDetail({
 }) {
   const t = useT()
   const push = useToastsStore((s) => s.push)
-  const { tabs, activeId } = useTabsStore()
+  const { tabs, activeId, lastTerminalTabId } = useTabsStore()
   const [variantId, setVariantId] = useState(rb.variants[0]!.id)
   const [values, setValues] = useState<Record<string, string>>({})
   const [pendingDanger, setPendingDanger] = useState<(() => void) | null>(null)
@@ -230,13 +230,17 @@ function RunbookDetail({
   const variant = rb.variants.find((v) => v.id === variantId) ?? rb.variants[0]!
   const vars = variantVars(variant)
 
-  /** Pane terminal đang kết nối ở tab active — đích của nút Gửi. */
-  const targetPane = (() => {
-    const tab = tabs.find((x) => x.id === activeId)
-    if (!tab || tab.kind !== 'terminal') return null
-    const pane = tab.panes.find((p) => p.id === tab.activePaneId) ?? tab.panes[0]
-    return pane && pane.status === 'connected' ? pane : null
-  })()
+  /**
+   * Pane terminal đích của nút Gửi. Không tự tìm ở đây: `terminalTargetPane()` biết cả trường
+   * hợp Sổ tay đang MỞ DẠNG TAB — lúc đó tab active chính là Sổ tay nên phải rơi về tab terminal
+   * user vào gần nhất. Ba giá trị store ở trên được đọc để component re-render khi chúng đổi
+   * (mở/đóng tab, đổi tab, pane vừa kết nối xong) — helper thì đọc lại state mới nhất.
+   */
+  const targetPane = useMemo(
+    () => terminalTargetPane()?.pane ?? null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cố ý phụ thuộc vào 3 giá trị store
+    [tabs, activeId, lastTerminalTabId]
+  )
 
   const guard = (step: RunbookStep, action: () => void): void => {
     if (step.danger) setPendingDanger(() => action)

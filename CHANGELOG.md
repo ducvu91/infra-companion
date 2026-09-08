@@ -5,6 +5,21 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.24] — 2026-09-08
+
+### Added
+
+- **Scheduled jobs.** Run a command, a snippet, or a fleet inventory collection on a cron schedule from inside the app, without touching any server's crontab. Five-field cron or `@daily`/`@hourly`/`@weekly`/`@monthly`, with presets and a live *next run* preview; pick the hosts, a per-run timeout, and when to count the run as failed (any host, all hosts, or never). Each run is kept with per-host exit code, duration and output (head and tail, capped), the last 50 runs per job are browsable from the row, and a failure is recorded in Notifications so a nightly backup check that stops passing is not something you find out about a month later. The schedule lives outside the vault so the scheduler knows it the moment the app starts, but running needs the vault open — a run that meets a locked vault is recorded as **skipped with the reason**, never silently dropped. Pairs with close-to-tray from 0.2.22: the app keeps running with the window closed, which is what makes a schedule worth having.
+- **Fleet security check.** One read-only command per host, scored into a to-do list: does sshd still accept passwords or let root log in, which listening ports are reachable from outside rather than loopback, how many failed logins are in the auth log, is fail2ban present, are there `NOPASSWD` sudo rules, accounts with empty passwords or a second UID 0, keys in root's `authorized_keys`, is a firewall active, is SELinux enforcing, is a reboot pending. Each host gets a score out of 100 and its findings sorted worst first, each finding carries a **How to** button that opens the matching runbook. The app changes nothing — no `sudo`, nothing installed — and results are **never written to disk**: they are a snapshot of "which machine is exposing what", exactly the thing that should not be sitting in a file.
+- **Shell integration (OSC 133) and long-command notifications.** With a small snippet added to the host's `.bashrc` (Settings copies it for you), the terminal learns where each command starts and ends and what it exited with: the pane shows the last command's status and how long it took, and a command that ran longer than 20 seconds notifies you when it finishes **if you are looking elsewhere** — a different tab, or the window unfocused — so a long `composer install` or `mysqldump` tells you it is done instead of you checking back. Interactive programs (an editor, `top`, a pager) never notify. Both the marks and the notification can be turned off in Settings.
+- **Folder diff and auto-upload.** Pair a folder on this machine with a folder on a host: the diff table compares modified time and size to say which side is newer, which files exist on only one side, and which have the same timestamp but a different size (shown as a conflict rather than guessed at). **Push changes** uploads the local-newer and local-only files in one go; **Watch** uploads a file as soon as you save it, creating remote directories as needed and reusing one SFTP session instead of reconnecting per file. Deliberately one way, machine → host: a file that is newer on the server usually means somebody edited it there directly, so it is flagged, not overwritten. A deleted local file is never deleted on the host. An ignore list (`.git`, `node_modules`, `vendor`, `.env`, `*.log`… editable per pair) keeps local-only files out, and paths that would escape the remote root are refused.
+
+### Fixed
+
+- **Runbooks: *Send* said "no connected terminal" even with an SSH tab open.** It only looked at the tab you were *currently* on — and when a runbook is opened as a tab, that tab is the runbook itself, so the check could never succeed. *Send* now falls back to the terminal tab you were on most recently. Deliberately "most recently used" rather than "any terminal it can find": sending an `iptables` line to the wrong machine is a real accident, so the target has to be where you were actually working, and with no connected session anywhere it still refuses instead of guessing. The same fix applies to the AI troubleshooter, which pre-selects the host you are working on and had the same blind spot when opened as a tab.
+
+---
+
 ## [0.2.23] — 2026-09-07
 
 ### Added

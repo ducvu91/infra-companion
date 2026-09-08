@@ -25,6 +25,7 @@ import { MouseCursorSection } from './MouseCursorSection'
 import { TermFontSection } from './TermFontSection'
 import { Button, Field, TextArea, TextInput } from './ui'
 import { useTrayStore } from '../stores/tray'
+import { OSC133_BASH_SNIPPET } from '@infra/shared'
 
 /** Các nhóm cài đặt hiển thị ở cột điều hướng bên trái của màn hình Settings. */
 type SettingsSection =
@@ -146,7 +147,11 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     autoCompleteEnabled,
     commandAliases,
     setAutoCompleteEnabled,
-    setCommandAliases
+    setCommandAliases,
+    shellMarksEnabled,
+    setShellMarksEnabled,
+    notifyLongCommands,
+    setNotifyLongCommands
   } = useSettingsStore()
 
   const updateAlias = (i: number, patch: Partial<CommandAlias>): void =>
@@ -688,6 +693,50 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
 
             {section === 'autocomplete' && (
               <>
+                {/* F23/F26 — Shell integration đứng ĐẦU mục này: nó cùng họ "terminal thông minh"
+                    với auto-complete, và là thứ phải bật trước để hai tuỳ chọn kia có tác dụng. */}
+                <Field label={t('settings.shellMarks')}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([true, false] as const).map((on) => (
+                      <button
+                        key={String(on)}
+                        onClick={() => setShellMarksEnabled(on)}
+                        className={`rounded border px-2 py-2 text-sm ${
+                          shellMarksEnabled === on ? 'border-accent text-content bg-accent-soft/40' : 'border-edge text-muted hover:bg-hover'
+                        }`}
+                      >
+                        {on ? t('plugins.enable') : t('plugins.disable')}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <p className="text-subtle mb-2 text-[11px] leading-relaxed">{t('settings.shellMarksHint')}</p>
+                <Button
+                  className="mb-3"
+                  onClick={() => {
+                    void navigator.clipboard.writeText(OSC133_BASH_SNIPPET).then(() => push(t('settings.shellMarksCopied'), 'info'))
+                  }}
+                >
+                  {t('settings.shellMarksCopy')}
+                </Button>
+
+                <Field label={t('settings.notifyLong')}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([true, false] as const).map((on) => (
+                      <button
+                        key={String(on)}
+                        onClick={() => setNotifyLongCommands(on)}
+                        className={`rounded border px-2 py-2 text-sm ${
+                          notifyLongCommands === on ? 'border-accent text-content bg-accent-soft/40' : 'border-edge text-muted hover:bg-hover'
+                        }`}
+                      >
+                        {on ? t('plugins.enable') : t('plugins.disable')}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <p className="text-subtle mb-4 text-[11px] leading-relaxed">{t('settings.notifyLongHint')}</p>
+
                 <p className="text-subtle mb-3 text-[11px] leading-relaxed">{t('settings.autocompleteHint')}</p>
                 <Field label={t('settings.autocompleteEnable')}>
                   <div className="grid grid-cols-2 gap-2">

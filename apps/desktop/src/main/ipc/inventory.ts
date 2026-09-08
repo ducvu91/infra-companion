@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
 import { FACTS_COMMAND, InventoryStore, execOnce, factsToCsv, parseFacts } from '@infra/core'
 import { IPC, type InventoryCollectResultDto, type InventoryProgressDto, type InventoryRowDto } from '@infra/shared'
 import { makeHostKeyVerifier, prepareConnection } from './connection'
@@ -20,10 +20,10 @@ function getStore(): InventoryStore {
   return store
 }
 
-async function collectOne(event: IpcMainInvokeEvent, hostId: string): Promise<InventoryCollectResultDto> {
+async function collectOne(sender: WebContents, hostId: string): Promise<InventoryCollectResultDto> {
   try {
-    const prepared = await prepareConnection(event.sender, hostId)
-    const res = await execOnce(prepared.chain, FACTS_COMMAND, makeHostKeyVerifier(event.sender), {
+    const prepared = await prepareConnection(sender, hostId)
+    const res = await execOnce(prepared.chain, FACTS_COMMAND, makeHostKeyVerifier(sender), {
       loginSteps: prepared.loginSteps,
       timeoutMs: EXEC_TIMEOUT_MS
     })
@@ -38,28 +38,42 @@ async function collectOne(event: IpcMainInvokeEvent, hostId: string): Promise<In
   }
 }
 
+/**
+ * Thu facts cho một danh sách host (song song có giới hạn). Tách riêng khỏi handler IPC để
+ * **lịch chạy tự động** (`ipc/jobs.ts`, job loại `inventory`) đi đúng một đường thu với công cụ
+ * Kiểm kê fleet — hai bản parser/ghi kho song song là chỗ chắc chắn lệch nhau về sau.
+ */
+export async function collectInventoryFor(
+  sender: WebContents,
+  hostIds: readonly string[],
+  onProgress?: (p: InventoryProgressDto) => void
+): Promise<InventoryCollectResultDto[]> {
+  const ids = hostIds.filter((x): x is string => typeof x === 'string')
+  const results: InventoryCollectResultDto[] = []
+  let done = 0
+  const queue = [...ids]
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const hostId = queue.shift()
+      if (hostId === undefined) return
+      const r = await collectOne(sender, hostId)
+      results.push(r)
+      done += 1
+      onProgress?.({ hostId, done, total: ids.length })
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker))
+  return results
+}
+
 export function registerInventoryIpc(): () => void {
   ipcMain.handle(IPC.INVENTORY_LIST, (): InventoryRowDto[] => getStore().latestAll())
 
   ipcMain.handle(IPC.INVENTORY_COLLECT, async (event, hostIds: string[]): Promise<InventoryCollectResultDto[]> => {
     touchActivity()
-    const ids = Array.isArray(hostIds) ? hostIds.filter((x): x is string => typeof x === 'string') : []
-    const results: InventoryCollectResultDto[] = []
-    let done = 0
-    const queue = [...ids]
-    const worker = async (): Promise<void> => {
-      for (;;) {
-        const hostId = queue.shift()
-        if (hostId === undefined) return
-        const r = await collectOne(event, hostId)
-        results.push(r)
-        done += 1
-        const progress: InventoryProgressDto = { hostId, done, total: ids.length }
-        if (!event.sender.isDestroyed()) event.sender.send(IPC.INVENTORY_PROGRESS, progress)
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, ids.length) }, worker))
-    return results
+    return collectInventoryFor(event.sender, Array.isArray(hostIds) ? hostIds : [], (progress) => {
+      if (!event.sender.isDestroyed()) event.sender.send(IPC.INVENTORY_PROGRESS, progress)
+    })
   })
 
   ipcMain.handle(IPC.INVENTORY_DELETE, (_e, hostId: string) => {

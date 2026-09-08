@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AiDiagnoseRecordDto } from '@infra/shared'
 import { useT } from '../i18n'
 import { formatTime } from '../lib/paths'
 import { MiniMarkdown } from '../lib/miniMarkdown'
 import { useAiDiagnoseStore, type DiagnoseStep } from '../stores/aiDiagnose'
 import { useDataStore } from '../stores/data'
-import { useTabsStore } from '../stores/tabs'
+import { terminalTargetPane, useTabsStore } from '../stores/tabs'
 import { Button, Field, ModalOrPanel, Select, TextArea } from './ui'
 import { OpenInTabButton } from './OpenInTabButton'
 
@@ -38,12 +38,16 @@ export function AiDiagnoseModal({
   }, [loadHistory])
 
   const hosts = useDataStore((s) => s.hosts).filter((h) => h.protocol === 'ssh')
-  const activeHostId = useTabsStore((s) => {
-    const tab = s.tabs.find((tb) => tb.id === s.activeId)
-    if (tab?.kind !== 'terminal') return null
-    const pane = tab.panes.find((p) => p.id === tab.activePaneId) ?? tab.panes[0]
-    return pane?.origin?.kind === 'host' ? pane.origin.hostId : null
-  })
+  // Host gợi ý sẵn = host của pane terminal user đang/vừa làm. Dùng `terminalTargetPane()` vì
+  // modal này mở được DẠNG TAB — lúc đó tab active là chính nó, phải rơi về tab terminal gần nhất.
+  const tabsSnapshot = useTabsStore((s) => s.tabs)
+  const activeTabId = useTabsStore((s) => s.activeId)
+  const lastTerminalTabId = useTabsStore((s) => s.lastTerminalTabId)
+  const activeHostId = useMemo(() => {
+    const origin = terminalTargetPane()?.pane.origin
+    return origin?.kind === 'host' ? origin.hostId : null
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cố ý phụ thuộc vào 3 giá trị store
+  }, [tabsSnapshot, activeTabId, lastTerminalTabId])
 
   const [hostId, setHostId] = useState(activeHostId ?? hosts[0]?.id ?? '')
   const [symptom, setSymptom] = useState('')

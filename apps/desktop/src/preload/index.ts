@@ -3,9 +3,12 @@ import { release } from 'node:os'
 import {
   IPC,
   type AppEventDto,
+  type FolderSyncEventDto,
   type HttpCheckResultDto,
   type HttpCheckSummaryDto,
   type InventoryProgressDto,
+  type JobRunEventDto,
+  type SecurityProgressDto,
   type BulkRunEvent,
   type GroupInput,
   type HostInput,
@@ -113,6 +116,28 @@ const api: InfraApi = {
     exportCsv: () => ipcRenderer.invoke(IPC.INVENTORY_EXPORT_CSV),
     remove: (hostId) => ipcRenderer.invoke(IPC.INVENTORY_DELETE, hostId),
     onProgress: (cb) => subscribe<InventoryProgressDto>(IPC.INVENTORY_PROGRESS, cb)
+  },
+  security: {
+    scan: (hostIds) => ipcRenderer.invoke(IPC.SECURITY_SCAN, hostIds),
+    onProgress: (cb) => subscribe<SecurityProgressDto>(IPC.SECURITY_PROGRESS, cb)
+  },
+  jobs: {
+    list: () => ipcRenderer.invoke(IPC.JOBS_LIST),
+    save: (input) => ipcRenderer.invoke(IPC.JOBS_SAVE, input),
+    remove: (id) => ipcRenderer.invoke(IPC.JOBS_DELETE, id),
+    runNow: (id) => ipcRenderer.invoke(IPC.JOBS_RUN_NOW, id),
+    runs: (id) => ipcRenderer.invoke(IPC.JOBS_RUNS, id),
+    onRunEvent: (cb) => subscribe<JobRunEventDto>(IPC.JOBS_RUN_EVENT, cb)
+  },
+  folderSync: {
+    list: () => ipcRenderer.invoke(IPC.FOLDERSYNC_LIST),
+    save: (input) => ipcRenderer.invoke(IPC.FOLDERSYNC_SAVE, input),
+    remove: (id) => ipcRenderer.invoke(IPC.FOLDERSYNC_DELETE, id),
+    pickLocal: () => ipcRenderer.invoke(IPC.FOLDERSYNC_PICK_LOCAL),
+    scan: (pairId) => ipcRenderer.invoke(IPC.FOLDERSYNC_SCAN, pairId),
+    push: (pairId, paths) => ipcRenderer.invoke(IPC.FOLDERSYNC_PUSH, pairId, paths),
+    watch: (pairId, on) => ipcRenderer.invoke(IPC.FOLDERSYNC_WATCH, pairId, on),
+    onEvent: (cb) => subscribe<FolderSyncEventDto>(IPC.FOLDERSYNC_EVENT, cb)
   },
   runbooks: {
     listCustom: () => ipcRenderer.invoke(IPC.RUNBOOKS_LIST_CUSTOM),

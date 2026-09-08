@@ -93,6 +93,8 @@ export { HTTP_RESULT_RETENTION_MS, HttpCheckStore } from './httpcheck/HttpCheckS
 // Kiểm kê fleet (CMDB nhẹ): lệnh thu facts + parser + kho lịch sử (lọc/so lệch ở @infra/shared vì renderer dùng).
 export { FACTS_COMMAND, factsToCsv, parseFacts, splitSections } from './inventory/facts'
 export { InventoryStore, KEEP_PER_HOST } from './inventory/InventoryStore'
+// F40 — Lịch chạy tự động: kho lịch sử các lượt (phần tính lịch là hàm thuần ở @infra/shared).
+export { JobStore } from './jobs/JobStore'
 // F55 — Theo dõi bất đồng bộ master ↔ slave (MySQL/MariaDB).
 export {
   READ_ONLY_SQL,
@@ -485,6 +487,8 @@ export {
   writeSucceeded
 } from './diag/crontab'
 export type { CronLine, CronLineKind, CronScope, ScheduleDescription } from './diag/crontab'
+// F38 — kiểm an ninh nhanh cả fleet: một lệnh chỉ-đọc + chấm thành việc cần làm.
+export { SECURITY_COMMAND, auditFindings, auditScore, buildScan, parsePublicPorts, splitAuditSections } from './diag/securityAudit'
 // F37 — đọc nhãn bảo mật từ `updateinfo` (họ RHEL không dò được qua tên repo).
 // Phần TÓM TẮT (`groupOf`/`summarizeUpdates`/`summarizeFleet`) nằm ở `@infra/shared` vì
 // renderer là nơi vẽ nó, mà renderer không import được `@infra/core` (CLAUDE.md §5).

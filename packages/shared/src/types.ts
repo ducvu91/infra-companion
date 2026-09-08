@@ -1478,6 +1478,44 @@ export interface MarkerInput {
 }
 
 // ---------------------------------------------------------------------------
+// F38 — Kiểm an ninh nhanh cả fleet (một lệnh chỉ-đọc mỗi host)
+// ---------------------------------------------------------------------------
+
+export type SecurityFindingLevel = 'high' | 'medium' | 'low' | 'info'
+
+export interface SecurityFindingDto {
+  /** Khoá ổn định (`ssh-password`, `ports-risky`…) — React key + lọc. */
+  id: string
+  level: SecurityFindingLevel
+  title: string
+  detail: string | null
+  /** Sổ tay vận hành nói cách xử lý — null khi chưa có sổ tay tương ứng. */
+  runbookId: string | null
+}
+
+export interface SecurityScanDto {
+  hostId: string
+  collectedAt: number
+  ok: boolean
+  /** Vì sao không quét được (không nối được, thiếu lệnh) — null khi ok. */
+  error: string | null
+  /** 0–100, trừ theo mức nặng. Chỉ có nghĩa khi `ok`. */
+  score: number
+  findings: SecurityFindingDto[]
+}
+
+export interface SecurityProgressDto {
+  hostId: string
+  done: number
+  total: number
+}
+
+/** F40 — main → renderer: một việc theo lịch vừa bắt đầu hoặc vừa xong. */
+export type JobRunEventDto =
+  | { phase: 'running'; jobId: string }
+  | { phase: 'done'; jobId: string; run: import('./jobs').JobRunDto }
+
+// ---------------------------------------------------------------------------
 // Theo dõi URL (synthetic HTTP monitoring) — cấu hình ở http-checks.json, kết quả ở checks.db
 // ---------------------------------------------------------------------------
 
@@ -2058,6 +2096,38 @@ export interface InfraApi {
     exportCsv(): Promise<{ ok: boolean; path?: string; message: string }>
     remove(hostId: string): Promise<void>
     onProgress(cb: (p: InventoryProgressDto) => void): () => void
+  }
+  /** F38 — Kiểm an ninh nhanh: quét N host, kết quả giữ trong phiên (không lưu đĩa). */
+  security: {
+    scan(hostIds: string[]): Promise<SecurityScanDto[]>
+    onProgress(cb: (p: SecurityProgressDto) => void): () => void
+  }
+  /** F40 — Lịch chạy tự động. Lịch đọc được khi vault khoá; lúc CHẠY thì cần vault mở. */
+  jobs: {
+    list(): Promise<{ jobs: import('./jobs').ScheduledJobDto[]; latest: Record<string, import('./jobs').JobRunDto> }>
+    save(input: import('./jobs').ScheduledJobInput): Promise<import('./jobs').ScheduledJobDto>
+    remove(id: string): Promise<void>
+    /** Chạy ngay một việc, không đợi lịch. */
+    runNow(id: string): Promise<import('./jobs').JobRunDto | null>
+    runs(id: string): Promise<import('./jobs').JobRunDto[]>
+    onRunEvent(cb: (e: JobRunEventDto) => void): () => void
+  }
+  /**
+   * F28/F29 — Cặp thư mục local ↔ remote: so lệch theo mtime/size và tự đẩy khi file local đổi.
+   * Danh sách cặp lưu ngoài vault (chỉ là đường dẫn, không bí mật) nên đọc được lúc vault khoá;
+   * quét và đẩy thì cần vault mở vì phải nối SSH.
+   */
+  folderSync: {
+    list(): Promise<import('./folderSync').FolderPairDto[]>
+    save(input: import('./folderSync').FolderPairInput): Promise<import('./folderSync').FolderPairDto>
+    remove(id: string): Promise<void>
+    /** Hộp thoại chọn thư mục local; null nếu user huỷ. */
+    pickLocal(): Promise<string | null>
+    scan(pairId: string): Promise<import('./folderSync').FolderScanDto>
+    /** Đẩy các file local mới hơn / chỉ có ở local. Trả số file đã đẩy. */
+    push(pairId: string, paths?: string[]): Promise<{ pushed: number; failed: number; message: string }>
+    watch(pairId: string, on: boolean): Promise<boolean>
+    onEvent(cb: (e: import('./folderSync').FolderSyncEventDto) => void): () => void
   }
   /** Sổ tay vận hành — phần RIÊNG của user (sổ tay có sẵn nằm trong renderer, không cần IPC). Cần vault mở. */
   runbooks: {

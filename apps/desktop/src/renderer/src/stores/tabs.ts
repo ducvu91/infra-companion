@@ -67,7 +67,13 @@ export const TOOL_TAB_KINDS = [
   /** Kiểm kê fleet — bảng rộng, hợp tab hơn popup. */
   'inventory',
   /** Sổ tay vận hành — đọc cạnh terminal đang làm. */
-  'runbooks'
+  'runbooks',
+  /** Lịch chạy tự động — danh sách việc + lịch sử lượt. */
+  'jobs',
+  /** Kiểm an ninh nhanh cả fleet. */
+  'security',
+  /** So lệch thư mục local ↔ remote — bảng rộng, hợp tab hơn popup. */
+  'folder-sync'
 ] as const
 export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number]
 
@@ -109,6 +115,15 @@ const toastError = (error: unknown): void => useToastsStore.getState().push(erro
 interface TabsState {
   tabs: AppTab[]
   activeId: string | null
+  /**
+   * Tab terminal user vào GẦN NHẤT — đích của những nút "gửi lệnh vào terminal" khi bản thân
+   * công cụ đang là tab đang mở (Sổ tay vận hành mở dạng tab thì `activeId` trỏ vào chính nó).
+   *
+   * Cố ý là "gần nhất" chứ không phải "tab terminal đầu tiên tìm thấy": gửi một lệnh `iptables`
+   * vào máy khác không phải máy user đang làm là hỏng thật, nên đích phải là chỗ user vừa đứng.
+   * Cập nhật ở MỘT chỗ (subscribe cuối file) thay vì rải theo từng lời gọi `set({ activeId })`.
+   */
+  lastTerminalTabId: string | null
   /** Gộp mọi tab terminal thành pane trong tab này (1 toolbar, broadcast dùng chung). */
   mergeTabs: (tabId: string) => void
   /** Gộp CHỌN LỌC: chỉ gộp các tab terminal trong `tabIds` (luôn gồm tab đích) vào tab đích. */
@@ -219,6 +234,7 @@ async function createPane(req: TerminalCreateRequest): Promise<Pane> {
 export const useTabsStore = create<TabsState>((set, get) => ({
   tabs: [],
   activeId: null,
+  lastTerminalTabId: null,
 
   mergeTabs: (tabId) =>
     set((state) => {
@@ -685,4 +701,35 @@ function mapPaneBySession(tabs: AppTab[], sessionId: string, fn: (p: Pane) => Pa
     if (!t.panes.some((p) => p.sessionId === sessionId)) return t
     return { ...t, panes: t.panes.map((p) => (p.sessionId === sessionId ? fn(p) : p)) }
   })
+}
+
+/**
+ * Ghi lại tab terminal user vào gần nhất. Một chỗ duy nhất — `activeId` bị `set` ở gần chục lời
+ * gọi (mở tab, đóng tab, gộp, tách, Ctrl+Tab, workspace…), gắn theo từng lời gọi thì chắc chắn sót.
+ */
+useTabsStore.subscribe((state) => {
+  if (!state.activeId) return
+  const tab = state.tabs.find((t) => t.id === state.activeId)
+  if (tab?.kind === 'terminal' && state.lastTerminalTabId !== tab.id) {
+    useTabsStore.setState({ lastTerminalTabId: tab.id })
+  }
+})
+
+/**
+ * Pane terminal ĐANG KẾT NỐI để gửi lệnh vào — dùng cho nút "Gửi" của Sổ tay vận hành và mọi
+ * công cụ tương tự.
+ *
+ * Ưu tiên tab đang mở; nếu tab đang mở không phải terminal (công cụ mở dạng tab, hoặc đang ở
+ * Dashboard) thì rơi về tab terminal user vào gần nhất. Không bao giờ đoán bừa một tab terminal
+ * nào đó: lệnh vận hành gửi sai máy là hỏng thật, thà báo "chưa có phiên nào" còn hơn.
+ */
+export function terminalTargetPane(): { pane: Pane; tabId: string } | null {
+  const { tabs, activeId, lastTerminalTabId } = useTabsStore.getState()
+  const pick = (tabId: string | null): { pane: Pane; tabId: string } | null => {
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab || tab.kind !== 'terminal') return null
+    const pane = tab.panes.find((p) => p.id === tab.activePaneId) ?? tab.panes[0]
+    return pane && pane.status === 'connected' ? { pane, tabId: tab.id } : null
+  }
+  return pick(activeId) ?? pick(lastTerminalTabId)
 }

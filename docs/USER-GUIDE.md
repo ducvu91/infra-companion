@@ -828,10 +828,45 @@ The result reads top-down, widest first:
 
 - Each runbook opens with **Read before you start** (red box) — e.g. keep a second SSH session open, add the live `iptables -I` rule before touching the file, never `ufw enable` before allowing SSH.
 - **Variables**: commands use `{{ip}}`, `{{port}}`, `{{domain}}`, `{{user}}`…; fill them once at the top and every command in the runbook updates. Empty ones stay as `{{…}}` so you see what still needs a value.
-- Every command has **Copy** and **Send** — Send types the command into the connected terminal of the current tab (it refuses while a variable is still empty). Steps that can drop your SSH connection or destroy data are marked **⚠ Dangerous** and ask for confirmation before copying or sending.
+- Every command has **Copy** and **Send** — Send types the command into the connected terminal of the tab you are on, or, when the runbook itself is the open tab, into the terminal tab you used most recently (it refuses while a variable is still empty, and refuses outright when no session is connected anywhere rather than guessing a machine). Steps that can drop your SSH connection or destroy data are marked **⚠ Dangerous** and ask for confirmation before copying or sending.
 - **My runbooks**: *+ New runbook* opens an editor with title, category, tags, summary, warnings and the steps in a small text format — `## Step title`, lines starting with `$ ` are the command (consecutive `$` lines form one block), other lines are notes, `!!` at the top of a step marks it dangerous, variables are written `{{ip}}`. *Copy to edit* on a built-in runbook (for the system tab you are viewing) is the quickest way to start one adapted to your infrastructure. Your runbooks are stored in the vault's meta table (not encrypted; do not put passwords in them) and appear while the vault is unlocked. Built-in content is in Vietnamese for now.
 
 **Test**: open *Whitelist một IP qua firewall* → the **firewalld** tab → type an IP in `{{ip}}` → every command now shows it → *Copy* on step 2 puts the filled command on the clipboard; on the **iptables-services** tab the last step (`systemctl restart iptables`) is red and asks for confirmation. Open an SSH tab, come back, *Send* on `iptables -L INPUT -n --line-numbers` → the command runs in that pane. *+ New runbook* → paste two `##` steps → the counter shows *2 steps* → Save → it appears under *My runbooks* with 📌; lock the vault → the section shows the locked note.
+
+### 15M. Scheduled jobs — *All features* → ⏰ Scheduled jobs
+
+**What it is**: a cron schedule that lives inside the app, for the checks you want run without adding anything to a server's crontab. Three kinds of job: a **command**, a **snippet** you already have, or a **fleet inventory collection**.
+
+- **Schedule**: five-field cron (`15 3 * * *`) or `@daily`/`@hourly`/`@weekly`/`@monthly`. Six presets are one click away, and the line under the field always shows the **next run** in your machine's time — an invalid expression says so instead of saving quietly.
+- **Hosts**: tick the machines (an inventory job with nothing ticked collects **every SSH host**). Up to 4 run in parallel, each with the timeout you set.
+- **Counting a failure**: *any host fails*, *all hosts fail*, or *never* (for a job whose exit code you do not care about). A failed run is recorded in **Notifications**, so a nightly backup check that stops passing surfaces the next morning rather than a month later.
+- **History**: every run keeps the start time, duration, status and — per host — the exit code, how long it took and the output (head and tail, capped so one chatty command cannot fill the database). Expand *History* on the row for the last 50 runs, worst host first. **Run now** tries a job without waiting for the schedule.
+- **The app must be running.** Combine with *Settings → Application → close to tray* (0.2.22) and the schedule survives closing the window. The schedule itself is stored in `jobs.json` next to the vault, so the scheduler knows it the moment the app starts; but running a job needs credentials, so a run that meets a **locked vault** is recorded as *skipped* with that reason and an info event — it is never silently dropped. A machine that was asleep past a scheduled time runs the job **once** on waking, not once per missed slot.
+
+**Test**: *+ New job* → *Command* → `uptime` → preset *Every 15 minutes* → tick two hosts → Save → the row shows the next run. **Run now** → the dot turns amber then green and the row reads *2/2 hosts OK*; expand *History* to see both outputs. Change the command to `exit 1` and run again → the row goes red, and 🔔 in the status bar gains an unread alert. Pause the job → the dot greys out and no next run is shown.
+
+### 15N. Fleet security check — *All features* → 🛡️ Fleet security check
+
+**What it is**: one **read-only** command per host (no install, no `sudo`, up to 4 in parallel, through the login script like every other diagnostic), turned into a score out of 100 and a list of things to fix. What it looks at: whether sshd still accepts **passwords** or lets **root** log in, which ports listen **beyond loopback** (a MySQL on `127.0.0.1` is not a finding; the same port on `0.0.0.0` is), how many **failed logins** are in the auth log, whether **fail2ban** is present, `NOPASSWD` **sudo** rules, accounts with an **empty password** or a **second UID 0**, keys in root's `authorized_keys`, whether a **firewall** is active, whether **SELinux** is enforcing, and whether a **reboot is pending**.
+
+- Findings are sorted worst first (high → medium → low → informational; *Hide informational* is on by default), and each one carries **How to**, which opens the matching runbook (§15L) instead of leaving you to search.
+- **The app changes nothing.** It runs no fix, and it writes **no results to disk**: a scan is a snapshot of "which machine is exposing what", which is exactly the sort of file that should not be sitting around. Close the tool and the results are gone; scan again when you want them.
+- A host that cannot be reached shows the connection error on its own row rather than scoring 0 silently.
+
+**Test**: open the tool → hosts are ticked by default → **Scan** → each machine gets a score and its findings; a machine with `PasswordAuthentication yes` shows that first in red. Click **How to** on it → Runbooks opens at *Harden SSH*. Untick *Hide informational* → the "firewall active" style entries appear too.
+
+### 15O. Folder diff & push — *All features* → 🔄 Folder diff & push
+
+**What it is**: for the loop where you edit code on your machine — a WordPress theme, a PHP app — and have to get it onto the server. Pair a **local folder** with a **folder on a host**, and the app tells you which files differ and pushes the ones you changed.
+
+- **Compare** uses **modified time and size**, not checksums: hashing a whole tree on a production machine is a long, CPU-hungry command, while time and size answer the real question ("which file did I change and not upload yet"). A 2-second tolerance covers filesystems that store seconds and clocks that are not perfectly in step.
+- The table says, per file: *local is newer* / *host is newer* / *local only* / *host only* / *identical*, plus **same time, different size** — shown as a **conflict** rather than guessed at. Identical files are hidden until you ask for them.
+- **Push changes** uploads the *local is newer* and *local only* files, creating remote directories as needed. A conflict is **never** pushed automatically.
+- **Watch** uploads a file as soon as you save it (writes are grouped for ~0.6 s so one save in an editor is one upload), reusing a single SFTP session instead of reconnecting per file. The watcher runs in the main process, so it keeps working while you are on another tab.
+- **One way only, machine → host.** A file that is newer on the server is flagged, not pulled down: it almost always means somebody edited it there directly, and overwriting would lose that edit. A file you delete locally is **not** deleted on the host — do that yourself, so one slip cannot wipe data.
+- The **ignore list** (`.git`, `node_modules`, `vendor`, `.env`, `*.log`… editable per pair) matches per path segment and supports only `*` and `?`. Keep `.env` on it so your local configuration never lands on the server. Paths that would escape the remote root are refused outright.
+
+**Test**: *+ New folder pair* → **Browse** for a local folder → pick a host → type the remote path (`/var/www/example.com`) → Save → **Compare**. Edit a file locally and compare again → it shows as *local is newer* in green; **Push changes** uploads it and the row becomes *identical*. Turn **Watch** on, save another file in your editor → *Just happened* under the table shows the upload within a second or two. Touch a file on the server → it shows *host is newer* in amber and stays that way.
 
 ### 15K. Fleet inventory — *All features* → 📇 Fleet inventory
 
@@ -1120,4 +1155,8 @@ Four tabs, one for each question you actually arrive with.
 - **Fleet inventory** is Linux-only (it reads `/proc`, `df`, `ss`/`netstat`) and version columns only cover PHP, nginx, Apache, MySQL/MariaDB, Node, Docker and Python.
 - **Import from other clients** never reads their stored passwords or key files; PuTTY `.ppk` keys must be converted to OpenSSH before importing in *Keys*. SecureCRT is not supported yet.
 - **Multi-host tail** opens one SSH connection per machine; keep the list to what the gate can take.
+- **Scheduled jobs** need the app running (pair them with close-to-tray) and the vault open; a run that meets a locked vault is recorded as *skipped*. Timing is checked every 30 seconds, so a job can start up to half a minute late, and the schedule is your machine's local time — including its daylight-saving jumps.
+- **Fleet security check** is Linux-only, needs no `sudo` and therefore cannot read `/etc/shadow`, a root-only `sshd_config` include, or anything else that requires privilege — it reports what an ordinary account can see. Results are not stored, so there is no history to compare.
+- **Shell integration** requires the snippet in the host's `.bashrc`; bash only for now (zsh and fish are not covered), and it applies to shells started after the snippet is added. A machine you have not set up simply shows nothing extra.
+- **Folder diff** compares modified time and size, so a file edited in place with the same length and a preserved timestamp reads as identical (this is why *same time, different size* is shown as a conflict rather than resolved). Watching uploads only; deletions and renames are never mirrored to the host, and a tree over 20 000 files is truncated with a warning. On Linux, per-directory watchers are registered because recursive `fs.watch` is not available there — a directory created while watching is picked up only after you toggle Watch off and on.
 - Not yet available: a self-hosted **team server**, a **Docker/K8s browser** — see [../ROADMAP.md](../ROADMAP.md).

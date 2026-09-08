@@ -71,6 +71,8 @@ const CMD_GUARD_ON_KEY = 'infra.cmdGuard.on'
 const CMD_GUARD_PATTERNS_KEY = 'infra.cmdGuard.patterns'
 const SHORTCUTS_KEY = 'infra.term.shortcuts'
 const AUTOCOMPLETE_ON_KEY = 'infra.term.autocomplete'
+const SHELL_MARKS_KEY = 'infra.term.shellMarks'
+const NOTIFY_LONG_KEY = 'infra.term.notifyLong'
 const ALIASES_KEY = 'infra.term.aliases'
 const CURSOR_KEY = 'infra.cursor.id'
 const CURSOR_LIST_KEY = 'infra.cursor.custom'
@@ -225,6 +227,19 @@ function readShortcuts(): Record<ShortcutAction, string> {
 /** Auto-complete dropdown trong terminal — mặc định BẬT; '0' = user đã tắt. */
 function readAutoComplete(): boolean {
   return localStorage.getItem(AUTOCOMPLETE_ON_KEY) !== '0'
+}
+
+/**
+ * F23 — hiện exit code + thời gian chạy cạnh mỗi lệnh (cần shell trên remote gửi OSC 133).
+ * Mặc định BẬT: không có marker thì phần này im lặng, nên bật sẵn không tốn gì.
+ */
+function readShellMarks(): boolean {
+  return localStorage.getItem(SHELL_MARKS_KEY) !== '0'
+}
+
+/** F26 — báo khi lệnh dài chạy xong (chỉ khi pane đang ẩn). Mặc định BẬT. */
+function readNotifyLong(): boolean {
+  return localStorage.getItem(NOTIFY_LONG_KEY) !== '0'
 }
 
 /** Danh sách từ tắt → lệnh (localStorage, per-máy). Bỏ mục thiếu trigger/command. */
@@ -403,6 +418,10 @@ interface SettingsState {
   shortcuts: Record<ShortcutAction, string>
   /** Auto-complete: gõ từ tắt ở terminal → dropdown gợi ý lệnh đầy đủ. */
   autoCompleteEnabled: boolean
+  /** F23 — đọc OSC 133 để hiện exit code + thời gian chạy cạnh mỗi lệnh. */
+  shellMarksEnabled: boolean
+  /** F26 — báo khi lệnh chạy lâu xong trong lúc pane đang ẩn. */
+  notifyLongCommands: boolean
   /** Danh sách từ tắt → lệnh cho auto-complete (per-máy). */
   commandAliases: CommandAlias[]
   /** Con trỏ chuột toàn app: id preset hoặc `custom:<id>`. 'system' = giữ con trỏ của OS. */
@@ -434,6 +453,8 @@ interface SettingsState {
   /** Trả mọi phím tắt về mặc định. */
   resetShortcuts: () => void
   setAutoCompleteEnabled: (on: boolean) => void
+  setShellMarksEnabled: (on: boolean) => void
+  setNotifyLongCommands: (on: boolean) => void
   /** Thay toàn bộ danh sách alias (Settings quản lý mảng, lưu localStorage). */
   setCommandAliases: (list: CommandAlias[]) => void
   /** Chọn con trỏ chuột (id preset hoặc `custom:<id>`). */
@@ -487,6 +508,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   commandGuardPatterns: readCommandGuardPatterns(),
   shortcuts: readShortcuts(),
   autoCompleteEnabled: readAutoComplete(),
+  shellMarksEnabled: readShellMarks(),
+  notifyLongCommands: readNotifyLong(),
   commandAliases: readCommandAliases(),
   mouseCursor: readMouseCursor(),
   customCursors: readCustomCursors(),
@@ -601,6 +624,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setAutoCompleteEnabled: (on) => {
     localStorage.setItem(AUTOCOMPLETE_ON_KEY, on ? '1' : '0')
     set({ autoCompleteEnabled: on })
+  },
+  setShellMarksEnabled: (on) => {
+    localStorage.setItem(SHELL_MARKS_KEY, on ? '1' : '0')
+    set({ shellMarksEnabled: on })
+  },
+  setNotifyLongCommands: (on) => {
+    localStorage.setItem(NOTIFY_LONG_KEY, on ? '1' : '0')
+    set({ notifyLongCommands: on })
   },
   setCommandAliases: (list) => {
     // Lưu nguyên mảng (kể cả dòng đang nhập dở) — terminal tự bỏ qua mục trigger rỗng khi khớp.

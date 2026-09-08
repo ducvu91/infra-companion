@@ -37,6 +37,9 @@ export type AppModal =
   | 'client-import'
   | 'inventory'
   | 'runbooks'
+  | 'jobs'
+  | 'security'
+  | 'folder-sync'
   | null
 
 /**

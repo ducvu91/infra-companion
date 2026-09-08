@@ -22,6 +22,11 @@ import { HttpChecksModal } from './components/HttpChecksModal'
 import { ClientImportModal } from './components/ClientImportModal'
 import { InventoryModal } from './components/InventoryModal'
 import { RunbooksModal } from './components/RunbooksModal'
+import { JobsModal } from './components/JobsModal'
+import { SecurityAuditModal } from './components/SecurityAuditModal'
+import { FolderSyncModal } from './components/FolderSyncModal'
+import { useFolderSyncStore } from './stores/folderSync'
+import { useJobsStore } from './stores/jobs'
 import { useInventoryStore } from './stores/inventory'
 import { useEventsStore } from './stores/events'
 import { useHttpChecksStore } from './stores/httpChecks'
@@ -213,6 +218,10 @@ export default function App() {
     void useHttpChecksStore.getState().load()
     // Kiểm kê fleet: tiến độ đợt thu (main gửi từng host xong)
     const offInvProgress = window.infra.inventory.onProgress((p) => useInventoryStore.getState().applyProgress(p))
+    // Lịch chạy tự động: lượt bắt đầu/kết thúc (kể cả lượt do scheduler tự chạy khi màn hình đóng)
+    const offJobRun = window.infra.jobs.onRunEvent((e) => useJobsStore.getState().applyRunEvent(e))
+    // Theo dõi thư mục: watcher chạy ở main nên file được đẩy cả khi tab so lệch đang đóng
+    const offFolderSync = window.infra.folderSync.onEvent((e) => useFolderSyncStore.getState().applyEvent(e))
     // Local dev: trạng thái service / tiến độ tải runtime / tiến độ thao tác site (main là nguồn sự thật)
     const offLdService = window.infra.localdev.onServiceEvent((s) =>
       useLocaldevStore.getState().applyServiceEvent(s)
@@ -246,6 +255,8 @@ export default function App() {
       offEventChanged()
       offHttpSummary()
       offInvProgress()
+      offJobRun()
+      offFolderSync()
     }
   }, [])
 
@@ -394,6 +405,9 @@ export default function App() {
     { id: 'open-client-import', label: t('menu.clientImport'), run: () => setModal('client-import') },
     { id: 'open-inventory', label: t('menu.inventory'), run: () => useTabsStore.getState().openToolTab('inventory') },
     { id: 'open-runbooks', label: t('menu.runbooks'), run: () => setModal('runbooks') },
+    { id: 'open-jobs', label: t('menu.jobs'), run: () => setModal('jobs') },
+    { id: 'open-security', label: t('menu.security'), run: () => setModal('security') },
+    { id: 'open-folder-sync', label: t('menu.folderSync'), run: () => useTabsStore.getState().openToolTab('folder-sync') },
     { id: 'open-monitor-tab', label: `📊 ${t('monitor.openInTab')}`, run: () => useTabsStore.getState().openMonitorTab() },
     { id: 'open-processes', label: t('menu.processes'), run: () => setModal('processes') },
     {
@@ -602,6 +616,9 @@ export default function App() {
       {modal === 'client-import' && <ClientImportModal onClose={() => setModal(null)} />}
       {modal === 'inventory' && <InventoryModal onClose={() => setModal(null)} />}
       {modal === 'runbooks' && <RunbooksModal onClose={() => setModal(null)} />}
+      {modal === 'jobs' && <JobsModal onClose={() => setModal(null)} />}
+      {modal === 'security' && <SecurityAuditModal onClose={() => setModal(null)} />}
+      {modal === 'folder-sync' && <FolderSyncModal onClose={() => setModal(null)} />}
       {modal === 'bulk' && <BulkRunModal onClose={() => setModal(null)} />}
       {modal === 'net' && <NetToolboxModal onClose={() => setModal(null)} />}
       {modal === 'monitor' && <MonitorModal onClose={() => setModal(null)} />}

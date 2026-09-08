@@ -78,6 +78,8 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'tunnels', menuKey: 'menu.tunnels', descKey: 'features.dTunnels', category: 'session', modal: 'tunnels', common: true },
   // Trang SFTP: mở TAB (theme Infra) hoặc chuyển mục 📁 SFTP (theme Navigator) — xem openTool
   { id: 'sftp', menuKey: 'menu.sftp', descKey: 'features.dSftp', category: 'session', tab: 'files', common: true },
+  // Bảng so lệch rộng (4 cột × cả cây file) → mở dạng TAB như kiểm kê
+  { id: 'folder-sync', menuKey: 'menu.folderSync', descKey: 'features.dFolderSync', category: 'session', tab: 'folder-sync', common: false },
   { id: 'recordings', menuKey: 'menu.recordings', descKey: 'features.dRecordings', category: 'session', modal: 'recordings', common: false },
 
   // --- Cả fleet ---
@@ -89,6 +91,7 @@ export const TOOLS: readonly ToolEntry[] = [
   { id: 'inventory', menuKey: 'menu.inventory', descKey: 'features.dInventory', category: 'fleet', tab: 'inventory', common: false },
   { id: 'pkg-updates', menuKey: 'menu.pkgUpdates', descKey: 'features.dPkgUpdates', category: 'fleet', modal: 'pkg-updates', common: false },
   { id: 'key-rotate', menuKey: 'menu.keyRotate', descKey: 'features.dKeyRotate', category: 'fleet', modal: 'key-rotate', common: false },
+  { id: 'jobs', menuKey: 'menu.jobs', descKey: 'features.dJobs', category: 'fleet', modal: 'jobs', common: false },
 
   // --- Chẩn đoán ---
   // Sổ tay vận hành ở LẠI menu `⋯`: đây là thứ người ta cần đúng lúc đang ở tab terminal
@@ -107,6 +110,7 @@ export const TOOLS: readonly ToolEntry[] = [
   // --- Bí mật & an ninh ---
   { id: 'keys', menuKey: 'menu.keys', descKey: 'features.dKeys', category: 'security', modal: 'keys', common: false },
   { id: 'known-hosts', menuKey: 'menu.knownHosts', descKey: 'features.dKnownHosts', category: 'security', modal: 'known-hosts', common: false },
+  { id: 'security', menuKey: 'menu.security', descKey: 'features.dSecurity', category: 'security', modal: 'security', common: false },
 
   // --- Dữ liệu vào/ra ---
   { id: 'sync', menuKey: 'menu.sync', descKey: 'features.dSync', category: 'data', modal: 'sync', common: true },
