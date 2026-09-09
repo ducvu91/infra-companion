@@ -103,7 +103,7 @@ function writeReplSettings(s: ReplSettingsDto): void {
   try {
     writeFileSync(settingsPath(), JSON.stringify(s, null, 2))
   } catch (e) {
-    console.error('[repl] không ghi được repl-settings.json:', e)
+    console.error('[repl] cannot write repl-settings.json:', e)
   }
 }
 
@@ -111,7 +111,7 @@ function writeReplSettings(s: ReplSettingsDto): void {
 export function postReplWebhook(url: string, alert: ReplAlertEvent & { label: string }): void {
   const req = buildReplWebhookRequest(url, alert)
   if (!req) return
-  void postWebhook(req).catch((e) => console.error('[repl] webhook lỗi:', (e as Error).message))
+  void postWebhook(req).catch((e) => console.error('[repl] webhook failed:', (e as Error).message))
 }
 
 /** Đăng ký GET/SET — onChanged để replication.ts cập nhật engine ngay khi user lưu. */

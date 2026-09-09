@@ -43,7 +43,7 @@ function registryPublicKey(): string {
     try {
       return readFileSync(file, 'utf8')
     } catch {
-      console.error('[marketplace] không đọc được INFRA_REGISTRY_PUBKEY_FILE — dùng key nhúng')
+      console.error('[marketplace] cannot read INFRA_REGISTRY_PUBKEY_FILE - using the built-in key')
     }
   }
   return OFFICIAL_REGISTRY_PUBLIC_KEY_PEM
@@ -82,7 +82,7 @@ export function registerMarketplaceIpc(): void {
     const pubKey = registryPublicKey()
     const entries = parsed.plugins.filter((e) => {
       const ok = verifyPluginEntry(e, pubKey)
-      if (!ok) console.error(`[marketplace] loại "${e.id}": chữ ký thiếu/không hợp lệ`)
+      if (!ok) console.error(`[marketplace] dropped "${e.id}": signature missing or invalid`)
       return ok
     })
     cache = { at: Date.now(), entries }

@@ -63,7 +63,7 @@ function loadDevOAuthFile(): { id: string; secret: string } | null {
   const found = candidates.map((dir) => join(dir, '.google-oauth.json')).find((path) => existsSync(path))
   if (!found) {
     // Nói rõ ĐÃ TÌM Ở ĐÂU — "file có mà app không thấy" nhìn y hệt "chưa cấu hình" (§8)
-    console.log(`[gdrive] không thấy .google-oauth.json (đã dò: ${candidates.join(' · ')}) — dùng env/hằng nhúng`)
+    console.log(`[gdrive] no .google-oauth.json found (looked in: ${candidates.join(' | ')}) - falling back to env/built-in`)
     return null
   }
   try {
@@ -75,13 +75,13 @@ function loadDevOAuthFile(): { id: string; secret: string } | null {
     const id = raw.installed?.client_id ?? raw.client_id
     const secret = raw.installed?.client_secret ?? raw.client_secret
     if (typeof id === 'string' && id !== '' && typeof secret === 'string' && secret !== '') {
-      console.log(`[gdrive] dùng OAuth client từ ${found} (chế độ dev)`)
+      console.log(`[gdrive] using OAuth client from ${found} (dev mode)`)
       return { id, secret }
     }
-    console.error(`[gdrive] ${found} có tồn tại nhưng thiếu client_id/client_secret`)
+    console.error(`[gdrive] ${found} exists but has no client_id/client_secret`)
     return null
   } catch (error) {
-    console.error(`[gdrive] không đọc được ${found}:`, error instanceof Error ? error.message : error)
+    console.error(`[gdrive] cannot read ${found}:`, error instanceof Error ? error.message : error)
     return null
   }
 }

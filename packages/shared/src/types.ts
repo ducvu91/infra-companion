@@ -2129,6 +2129,36 @@ export interface InfraApi {
     watch(pairId: string, on: boolean): Promise<boolean>
     onEvent(cb: (e: import('./folderSync').FolderSyncEventDto) => void): () => void
   }
+  /**
+   * F24 — lịch sử LỆNH theo host (ô tìm Ctrl+Shift+R). Nội dung lệnh mã hoá bằng DEK trong vault
+   * nên mọi đường ở đây cần vault MỞ; `add` khi vault khoá thì trả `false` và im lặng bỏ lượt
+   * chứ không throw (lệnh vẫn chạy bình thường trong phiên đã mở — không phá việc chính).
+   *
+   * KHÔNG đi qua sync: `export`/`import` file JSON là đường duy nhất mang sang máy khác.
+   */
+  commandHistory: {
+    /** Trả `false` nếu vault đang khoá hoặc ghi lỗi — nơi gọi không cần xử lý gì thêm. */
+    add(input: {
+      hostId: string | null
+      hostLabel: string
+      command: string
+      exitCode: number | null
+      durationMs: number
+      startedAt: number
+      /** Lệnh đã bị che một phần → không chạy lại nguyên văn được. */
+      redacted?: boolean
+    }): Promise<boolean>
+    /** `hostId` bỏ trống / null = mọi host. Vault khoá → mảng rỗng. */
+    list(options?: { hostId?: string | null; limit?: number }): Promise<
+      import('./commandHistory').CommandHistoryEntry[]
+    >
+    remove(id: string): Promise<void>
+    /** Xoá sạch; `hostId` để xoá của đúng một máy. Trả số dòng đã xoá. */
+    clear(hostId?: string | null): Promise<number>
+    /** Hộp thoại lưu file JSON (chữ THƯỜNG, không mã hoá); trả đường dẫn, null nếu huỷ. */
+    export(hostId?: string | null): Promise<string | null>
+    import(): Promise<{ added: number; message?: string }>
+  }
   /** Sổ tay vận hành — phần RIÊNG của user (sổ tay có sẵn nằm trong renderer, không cần IPC). Cần vault mở. */
   runbooks: {
     listCustom(): Promise<import('./runbooks').Runbook[]>

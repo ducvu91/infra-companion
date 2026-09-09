@@ -9,6 +9,7 @@ import { TabsBar } from './components/TabsBar'
 import { PromptsHost } from './components/PromptsHost'
 import { VaultGate } from './components/VaultGate'
 import { CommandPalette, type Command } from './components/CommandPalette'
+import { CommandHistoryPalette } from './components/CommandHistoryPalette'
 import { SnippetsModal } from './components/SnippetsModal'
 import { TunnelsModal } from './components/TunnelsModal'
 import { KeysModal } from './components/KeysModal'
@@ -134,6 +135,10 @@ export default function App() {
   const bottomOpen = useUiStore((s) => s.workbenchBottomOpen)
   // Command Palette lên store chung để nút toolbar (TerminalTabView) cũng mở được
   const paletteOpen = useUiStore((s) => s.paletteOpen)
+  const aiPanelOpen = useUiStore((s) => s.aiPanelOpen)
+  const aiDiagnoseOpen = useUiStore((s) => s.aiDiagnoseOpen)
+  const setAiPanelOpen = useUiStore((s) => s.setAiPanelOpen)
+  const cmdHistoryOpen = useUiStore((s) => s.cmdHistoryOpen)
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen)
   const togglePalette = useUiStore((s) => s.togglePalette)
   // store chung để Sidebar/palette cùng mở — tránh 2 instance modal dẫm chân nhau
@@ -310,6 +315,22 @@ export default function App() {
         togglePalette()
         return
       }
+      // F24 — ô tìm lệnh đã chạy: Ctrl+Shift+R.
+      //
+      // CỐ Ý không dùng Ctrl+R: trong terminal đó là reverse-search của bash/readline, chiếm nó
+      // ở tầng app (handler này chạy ở pha capture, trước xterm) là lấy mất một phím người ta
+      // đã dùng hàng năm. Hai đường đi song song. `preventDefault` vẫn cần vì Chromium coi
+      // Ctrl+Shift+R là hard-reload — thiếu nó là mất cả phiên terminal đang mở.
+      if (event.ctrlKey && event.shiftKey && event.code === 'KeyR') {
+        event.preventDefault()
+        event.stopPropagation()
+        const ui = useUiStore.getState()
+        // MỞ đi qua `setModal` để được đếm lượt dùng như mọi lối vào khác (menu ⋯, lưới, catalog);
+        // ĐÓNG thì gọi cờ trực tiếp — đóng không phải là "dùng công cụ".
+        if (ui.cmdHistoryOpen) ui.setCmdHistoryOpen(false)
+        else setModal('cmd-history')
+        return
+      }
       // Trợ giúp: F1 (không có modifier nên phải xét TRƯỚC guard ctrlKey bên dưới)
       if (event.code === 'F1') {
         event.preventDefault()
@@ -367,7 +388,11 @@ export default function App() {
       } else if (!event.shiftKey && event.code === 'KeyI') {
         event.preventDefault()
         event.stopPropagation()
-        setModal('ai')
+        // Trợ lý AI là panel ghim nên Ctrl+I TẮT/BẬT: panel không có backdrop, đóng nó bằng
+        // cùng phím vừa mở là phản xạ đúng (Esc thuộc terminal ở đây, không đóng panel).
+        const ui = useUiStore.getState()
+        if (ui.aiPanelOpen) ui.setAiPanelOpen(false)
+        else setModal('ai')
       }
     }
     // capture: chặn trước khi xterm xử lý (Ctrl+I là ký tự Tab trong terminal — không chặn sẽ dính cả 2)
@@ -483,6 +508,15 @@ export default function App() {
     { id: 'cron', label: t('menu.cron'), run: () => setModal('cron') },
     { id: 'key-rotate', label: t('menu.keyRotate'), run: () => setModal('key-rotate') },
     { id: 'pkg-updates', label: t('menu.pkgUpdates'), run: () => setModal('pkg-updates') },
+    {
+      id: 'cmd-history',
+      label: t('menu.cmdHistory'),
+      hint: 'Ctrl+Shift+R',
+      // `setModal` chứ không `setCmdHistoryOpen` trực tiếp: nó là nơi ĐẾM lượt dùng cho lưới
+      // công cụ Dashboard, nên đi tắt qua nó thì mở bằng palette không bao giờ kiếm được điểm
+      // để giành một ô trên lưới. Store tự chuyển 'cmd-history' sang cờ overlay.
+      run: () => setModal('cmd-history')
+    },
     { id: 'open-snippets', label: t('menu.snippets'), run: () => setModal('snippets') },
     { id: 'open-tunnels', label: t('menu.tunnels'), run: () => setModal('tunnels') },
     {
@@ -603,11 +637,20 @@ export default function App() {
           {/* Workbench: panel đáy (Monitoring / Log / Tunnels) dưới vùng tab, Ctrl+J — terminal tự fit lại qua ResizeObserver */}
           {layout === 'workbench' && bottomOpen && <BottomPanel />}
         </div>
+        {/* Trợ lý AI — cột DOCK bên phải, nằm TRONG flex row nên nó chiếm chỗ thật và terminal
+            hẹp lại nhường chỗ (xterm tự fit qua ResizeObserver) thay vì bị che. Đặt ở đây, không
+            phải ở khối modal bên dưới: ui.modal chỉ giữ một giá trị nên mở Snippets giữa lúc đang
+            hỏi AI sẽ làm mất câu hỏi. Có ở CẢ BA theme — hỏi AI không phụ thuộc bố cục nào. */}
+        {aiPanelOpen && <AiModal onClose={() => setAiPanelOpen(false)} />}
+        {/* AI chẩn đoán — cũng là dock, cùng lý do (phiên nhiều bước, mỗi bước chờ duyệt).
+            Đóng dock KHÔNG dừng phiên: `minimizeAiDiagnose` để lại pill báo "đang chờ duyệt". */}
+        {aiDiagnoseOpen && <AiDiagnoseModal onClose={minimizeAiDiagnose} />}
       </div>
       <StatusBar />
 
       <PromptsHost />
       {paletteOpen && <CommandPalette onClose={() => setPaletteOpen(false)} extraCommands={paletteCommands} />}
+      {cmdHistoryOpen && <CommandHistoryPalette onClose={() => useUiStore.getState().setCmdHistoryOpen(false)} />}
       {modal === 'snippets' && <SnippetsModal onClose={() => setModal(null)} />}
       {modal === 'tunnels' && <TunnelsModal onClose={() => setModal(null)} />}
       {modal === 'keys' && <KeysModal onClose={() => setModal(null)} />}
@@ -631,10 +674,6 @@ export default function App() {
       {modal === 'cron' && <CronModal onClose={() => setModal(null)} />}
       {modal === 'key-rotate' && <KeyRotateModal onClose={() => setModal(null)} />}
       {modal === 'pkg-updates' && <PackageUpdatesModal onClose={() => setModal(null)} />}
-      {modal === 'ai' && <AiModal onClose={() => setModal(null)} />}
-      {modal === 'ai-diagnose' && (
-        <AiDiagnoseModal onClose={() => setModal(null)} onMinimize={minimizeAiDiagnose} />
-      )}
       {modal === 'recordings' && <RecordingsModal onClose={() => setModal(null)} />}
       {modal === 'settings' && <SettingsModal onClose={() => setModal(null)} />}
       {modal === 'workspaces' && <WorkspacesModal onClose={() => setModal(null)} />}

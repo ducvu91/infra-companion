@@ -98,7 +98,7 @@ function writeMonitorSettings(s: MonitorSettingsDto): void {
   try {
     writeFileSync(settingsPath(), JSON.stringify(s, null, 2))
   } catch (e) {
-    console.error('[monitor] không ghi được monitor-settings.json:', e)
+    console.error('[monitor] cannot write monitor-settings.json:', e)
   }
 }
 

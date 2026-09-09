@@ -73,6 +73,7 @@ const SHORTCUTS_KEY = 'infra.term.shortcuts'
 const AUTOCOMPLETE_ON_KEY = 'infra.term.autocomplete'
 const SHELL_MARKS_KEY = 'infra.term.shellMarks'
 const NOTIFY_LONG_KEY = 'infra.term.notifyLong'
+const CMD_HISTORY_KEY = 'infra.term.commandHistory'
 const ALIASES_KEY = 'infra.term.aliases'
 const CURSOR_KEY = 'infra.cursor.id'
 const CURSOR_LIST_KEY = 'infra.cursor.custom'
@@ -240,6 +241,15 @@ function readShellMarks(): boolean {
 /** F26 — báo khi lệnh dài chạy xong (chỉ khi pane đang ẩn). Mặc định BẬT. */
 function readNotifyLong(): boolean {
   return localStorage.getItem(NOTIFY_LONG_KEY) !== '0'
+}
+
+/**
+ * F24 — lưu lịch sử lệnh vào vault. Mặc định BẬT: giá trị của tính năng nằm ở chỗ lịch sử đã
+ * có sẵn lúc cần tìm, mà thứ cần tìm luôn là lệnh của những tuần TRƯỚC — bật muộn thì không
+ * hồi tố được. Ai không muốn ghi thì tắt trong Cài đặt, và có nút xoá sạch ngay cạnh.
+ */
+function readCommandHistoryEnabled(): boolean {
+  return localStorage.getItem(CMD_HISTORY_KEY) !== '0'
 }
 
 /** Danh sách từ tắt → lệnh (localStorage, per-máy). Bỏ mục thiếu trigger/command. */
@@ -422,6 +432,8 @@ interface SettingsState {
   shellMarksEnabled: boolean
   /** F26 — báo khi lệnh chạy lâu xong trong lúc pane đang ẩn. */
   notifyLongCommands: boolean
+  /** F24 — lưu lệnh đã chạy vào vault (mã hoá) để tìm lại bằng Ctrl+Shift+R. */
+  commandHistoryEnabled: boolean
   /** Danh sách từ tắt → lệnh cho auto-complete (per-máy). */
   commandAliases: CommandAlias[]
   /** Con trỏ chuột toàn app: id preset hoặc `custom:<id>`. 'system' = giữ con trỏ của OS. */
@@ -454,6 +466,7 @@ interface SettingsState {
   resetShortcuts: () => void
   setAutoCompleteEnabled: (on: boolean) => void
   setShellMarksEnabled: (on: boolean) => void
+  setCommandHistoryEnabled: (on: boolean) => void
   setNotifyLongCommands: (on: boolean) => void
   /** Thay toàn bộ danh sách alias (Settings quản lý mảng, lưu localStorage). */
   setCommandAliases: (list: CommandAlias[]) => void
@@ -510,6 +523,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   autoCompleteEnabled: readAutoComplete(),
   shellMarksEnabled: readShellMarks(),
   notifyLongCommands: readNotifyLong(),
+  commandHistoryEnabled: readCommandHistoryEnabled(),
   commandAliases: readCommandAliases(),
   mouseCursor: readMouseCursor(),
   customCursors: readCustomCursors(),
@@ -632,6 +646,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setNotifyLongCommands: (on) => {
     localStorage.setItem(NOTIFY_LONG_KEY, on ? '1' : '0')
     set({ notifyLongCommands: on })
+  },
+  setCommandHistoryEnabled: (on) => {
+    localStorage.setItem(CMD_HISTORY_KEY, on ? '1' : '0')
+    set({ commandHistoryEnabled: on })
   },
   setCommandAliases: (list) => {
     // Lưu nguyên mảng (kể cả dòng đang nhập dở) — terminal tự bỏ qua mục trigger rỗng khi khớp.

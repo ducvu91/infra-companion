@@ -147,3 +147,41 @@ export const OSC133_BASH_SNIPPET = [
   '  fi',
   'fi'
 ].join('\n')
+
+/** Dòng đánh dấu trong `~/.bashrc` — để biết đã cài rồi hay chưa (bấm cài lại không nhân đôi). */
+export const OSC133_MARKER = '# >>> Infra Companion shell integration >>>'
+
+/**
+ * Lệnh **cài bền** đoạn OSC 133 vào `~/.bashrc` của máy remote, gửi thẳng vào terminal đang mở.
+ *
+ * Vì sao cần hàm này bên cạnh {@link OSC133_BASH_SNIPPET}: dán snippet vào một phiên chỉ có hiệu
+ * lực cho **phiên đó**, đóng tab là mất — mà lịch sử lệnh (F24) chỉ có giá trị khi nó ghi liên tục
+ * qua nhiều tuần. Nên UI cho cả hai đường: gửi-để-thử-ngay, và cài-một-lần-cho-mãi.
+ *
+ * Ba quyết định trong cách dựng lệnh, mỗi cái có lý do:
+ *  · **Heredoc `<<'IC_EOF'`** (có quote) để shell KHÔNG nội suy `$?`/`$PS1` trên đường truyền.
+ *    Đây là ngoại lệ CÓ Ý THỨC với "không dùng heredoc" ở CLAUDE.md §4: quy tắc đó nhắm những
+ *    lệnh chạy **qua nhiều hop login-script** (mỗi hop bọc thêm một lớp quote rồi bóc mất), còn
+ *    lệnh này gửi thẳng vào một phiên ĐÃ MỞ nên không đi qua lớp bọc nào.
+ *  · **Kiểm marker trước khi ghi** (`grep -q`) — bấm nút hai lần không được nhân đôi hook trong
+ *    `.bashrc`; bản thân snippet có guard `__ic_osc133` nhưng file thì vẫn phình ra.
+ *  · **`.bashrc` chứ không `.bash_profile`**: phiên SSH không-đăng-nhập chỉ đọc `.bashrc`.
+ *
+ * Thông báo echo cố ý viết KHÔNG DẤU: nó in ra terminal remote, mà locale ở đó thường là C/POSIX
+ * nên tiếng Việt có dấu sẽ ra ký tự hỏng.
+ */
+export function osc133InstallCommand(): string {
+  return [
+    `if grep -q '${OSC133_MARKER}' ~/.bashrc 2>/dev/null; then`,
+    "  echo 'Infra Companion: shell integration da co san trong ~/.bashrc'",
+    'else',
+    "  cat >> ~/.bashrc <<'IC_EOF'",
+    '',
+    OSC133_MARKER,
+    OSC133_BASH_SNIPPET,
+    '# <<< Infra Companion shell integration <<<',
+    'IC_EOF',
+    "  echo 'Infra Companion: da them vao ~/.bashrc - mo phien moi hoac chay: source ~/.bashrc'",
+    'fi'
+  ].join('\n')
+}

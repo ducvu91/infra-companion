@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useEventsStore } from '../stores/events'
 import { useGdriveStore } from '../stores/gdrive'
+import { useSettingsStore } from '../stores/settings'
 import { useTabsStore } from '../stores/tabs'
 import { useUiStore } from '../stores/ui'
 import { useVaultStore } from '../stores/vault'
@@ -21,6 +22,9 @@ export function StatusBar() {
   const setModal = useUiStore((s) => s.setModal)
   const gdrive = useGdriveStore((s) => s.status)
   const unread = useEventsStore((s) => s.unread)
+  const layout = useSettingsStore((s) => s.layout)
+  const bottomOpen = useUiStore((s) => s.workbenchBottomOpen)
+  const toggleBottom = useUiStore((s) => s.toggleWorkbenchBottom)
   const tab = tabs.find((t) => t.id === activeId)
   const { electron, node } = window.infra.versions
   const appVersion = __APP_VERSION__
@@ -46,6 +50,22 @@ export function StatusBar() {
     <div className="border-edge bg-panel text-subtle flex h-6 shrink-0 items-center justify-between border-t px-3 text-[11px] select-none">
       <span className="truncate">{info}</span>
       <span className="flex items-center gap-3">
+        {/* Theme Workbench: panel đáy KHÔNG có cách nào tự lộ ra — mặc định nó đóng, và chỗ bật duy
+            nhất trước đây là một icon `⬒` ở đáy activity bar, tức người dùng phải đoán ra rằng có
+            một panel tồn tại rồi mới đi tìm nút. Nút CÓ CHỮ ở đây là chỗ VS Code đặt đúng thứ này:
+            hàng trạng thái là nơi mắt đã quét sẵn, và chữ "Panel" nói được cái mà một icon không
+            nói được. Chỉ hiện ở theme này vì hai theme kia không có panel đáy. */}
+        {layout === 'workbench' && (
+          <button
+            className={`hover:text-content ${bottomOpen ? 'text-content' : ''}`}
+            title={t('workbench.bottomStatusHint')}
+            aria-label={t('workbench.bottomStatusHint')}
+            aria-pressed={bottomOpen}
+            onClick={toggleBottom}
+          >
+            ⬒ {t('workbench.bottomStatus')}
+          </button>
+        )}
         {/* Chuông trung tâm thông báo đứng ĐẦU cụm phải (trước tài khoản Google) — số chưa đọc tô
             warning để liếc là thấy có gì đêm qua; email dài không được đẩy nó đi chỗ khác */}
         <button

@@ -60,7 +60,7 @@ function saveChecks(): void {
   try {
     writeFileSync(configPath(), JSON.stringify(checks, null, 2), 'utf8')
   } catch (error) {
-    console.error('[http-checks] không ghi được cấu hình:', error instanceof Error ? error.message : error)
+    console.error('[http-checks] cannot write config:', error instanceof Error ? error.message : error)
   }
 }
 
@@ -101,7 +101,7 @@ function notify(check: HttpCheckDto, kind: 'alert' | 'recover', reason: string |
   }
   if (settings.webhookUrl) {
     const req = buildWebhookRequestFor(settings.webhookUrl, text, { checkId: check.id, url: check.url, kind, reason })
-    if (req) void postWebhook(req).catch((e) => console.error('[http-checks] webhook lỗi:', (e as Error).message))
+    if (req) void postWebhook(req).catch((e) => console.error('[http-checks] webhook failed:', (e as Error).message))
   }
 }
 

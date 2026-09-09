@@ -6,20 +6,22 @@ import { MiniMarkdown } from '../lib/miniMarkdown'
 import { useAiDiagnoseStore, type DiagnoseStep } from '../stores/aiDiagnose'
 import { useDataStore } from '../stores/data'
 import { terminalTargetPane, useTabsStore } from '../stores/tabs'
-import { Button, Field, ModalOrPanel, Select, TextArea } from './ui'
+import { AiDock } from './AiDock'
+import { Button, Field, Select, TextArea } from './ui'
 import { OpenInTabButton } from './OpenInTabButton'
 
-/** F48 — AI chẩn đoán sự cố: mô tả triệu chứng → AI đề xuất lệnh read-only từng bước,
- *  user duyệt → chạy qua kênh exec riêng → AI đọc output đề xuất tiếp → kết luận. */
-export function AiDiagnoseModal({
-  onClose,
-  onMinimize,
-  embedded
-}: {
-  onClose?: () => void
-  onMinimize?: () => void
-  embedded?: boolean
-}) {
+/**
+ * F48 — AI chẩn đoán sự cố: mô tả triệu chứng → AI đề xuất lệnh read-only từng bước, user duyệt
+ * → chạy qua kênh exec riêng → AI đọc output đề xuất tiếp → kết luận.
+ *
+ * **Cột DOCK cạnh terminal** (cùng khuôn Trợ lý AI, v0.2.25) chứ không phải modal. Ở đây lý do
+ * còn mạnh hơn: một phiên chẩn đoán chạy **nhiều bước, mỗi bước chờ user duyệt** — có backdrop
+ * thì suốt phiên đó không xem được gì khác, kể cả chính terminal của máy đang chẩn đoán. Trước
+ * đây phải bù bằng nút "–" thu xuống pill; giờ dock chiếm chỗ thật nên không cần né nữa.
+ *
+ * Nút **⊞ Mở dạng tab** khi output các bước dài — cùng component ở chế độ `embedded`.
+ */
+export function AiDiagnoseModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
   const t = useT()
   const session = useAiDiagnoseStore((s) => s.session)
   const start = useAiDiagnoseStore((s) => s.start)
@@ -58,87 +60,76 @@ export function AiDiagnoseModal({
     void start(host.id, host.label, symptom.trim())
   }
 
-  return (
-    <ModalOrPanel
-      embedded={embedded}
-      title={`🩺 ${t('ai.diagnose.title')}`}
-      onClose={onClose}
-      closeOnBackdrop={false}
-      headerExtra={
-        embedded ? undefined : (
-          <>
-            <OpenInTabButton kind="ai-diagnose" onDone={onClose} />
-            <button
-              type="button"
-              className="text-subtle hover:text-content shrink-0 px-1 text-lg leading-none"
-              aria-label={t('panel.minimize')}
-              title={t('ai.diagnose.minimizeHint')}
-              onClick={onMinimize}
-            >
-              –
-            </button>
-          </>
-        )
-      }
-    >
-      {/* Trong tab thì rộng thoải mái; popup giữ 620px như cũ */}
-      <div className={embedded ? 'w-full max-w-3xl' : 'w-[min(620px,88vw)]'}>
-        {!session ? (
-          <>
-            <Field label={t('ai.diagnose.hostLabel')}>
-              <Select value={hostId} onChange={(e) => setHostId(e.target.value)}>
-                {hosts.length === 0 && <option value="">{t('ai.diagnose.noHosts')}</option>}
-                {hosts.map((h) => (
-                  <option key={h.id} value={h.id}>
-                    {h.label}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-            <Field label={t('ai.diagnose.symptomLabel')}>
-              <TextArea
-                rows={3}
-                autoFocus
-                value={symptom}
-                placeholder={t('ai.diagnose.symptomPlaceholder')}
-                onChange={(e) => setSymptom(e.target.value)}
-              />
-            </Field>
-            <p className="text-subtle mb-3 text-[11px] leading-relaxed">{t('ai.diagnose.readonlyNote')}</p>
-            <div className="flex justify-end">
-              <Button variant="primary" disabled={!hostId || !symptom.trim()} onClick={begin}>
-                {t('ai.diagnose.start')}
-              </Button>
-            </div>
+  const body = (
+    <div className={embedded ? 'mx-auto w-full max-w-3xl' : 'w-full'}>
+      {!session ? (
+        <>
+          <Field label={t('ai.diagnose.hostLabel')}>
+            <Select value={hostId} onChange={(e) => setHostId(e.target.value)}>
+              {hosts.length === 0 && <option value="">{t('ai.diagnose.noHosts')}</option>}
+              {hosts.map((h) => (
+                <option key={h.id} value={h.id}>
+                  {h.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label={t('ai.diagnose.symptomLabel')}>
+            <TextArea
+              rows={3}
+              autoFocus
+              value={symptom}
+              placeholder={t('ai.diagnose.symptomPlaceholder')}
+              onChange={(e) => setSymptom(e.target.value)}
+            />
+          </Field>
+          <p className="text-subtle mb-3 text-[11px] leading-relaxed">{t('ai.diagnose.readonlyNote')}</p>
+          <div className="flex justify-end">
+            <Button variant="primary" disabled={!hostId || !symptom.trim()} onClick={begin}>
+              {t('ai.diagnose.start')}
+            </Button>
+          </div>
 
-            {history.length > 0 && (
-              <div className="border-edge mt-4 border-t pt-3">
-                <div className="text-subtle mb-2 text-[11px] font-semibold tracking-wide uppercase">
-                  {t('ai.diagnose.historyTitle')}
-                </div>
-                <div className="max-h-[34vh] space-y-1.5 overflow-y-auto">
-                  {history.map((rec) => (
-                    <HistoryItem
-                      key={rec.id}
-                      rec={rec}
-                      onOpen={() => void openHistory(rec.id)}
-                      onDelete={() => void deleteHistory(rec.id)}
-                    />
-                  ))}
-                </div>
+          {history.length > 0 && (
+            <div className="border-edge mt-4 border-t pt-3">
+              <div className="text-subtle mb-2 text-[11px] font-semibold tracking-wide uppercase">
+                {t('ai.diagnose.historyTitle')}
               </div>
-            )}
-          </>
-        ) : (
-          <SessionView
-            onApprove={() => void approve()}
-            onSkip={() => void skip()}
-            onStop={stop}
-            onNew={reset}
-          />
-        )}
-      </div>
-    </ModalOrPanel>
+              <div className="max-h-[34vh] space-y-1.5 overflow-y-auto">
+                {history.map((rec) => (
+                  <HistoryItem
+                    key={rec.id}
+                    rec={rec}
+                    onOpen={() => void openHistory(rec.id)}
+                    onDelete={() => void deleteHistory(rec.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <SessionView onApprove={() => void approve()} onSkip={() => void skip()} onStop={stop} onNew={reset} />
+      )}
+    </div>
+  )
+
+  // Chế độ TAB: nội dung chảy trong vùng tab (ToolTabView đã vẽ header).
+  if (embedded) return <div className="@container min-h-0 flex-1 overflow-y-auto px-4 py-3">{body}</div>
+
+  return (
+    <AiDock
+      icon="🩺"
+      title={t('ai.diagnose.title')}
+      // ✕ = cất dock đi. KHÔNG dừng phiên đang chạy: nửa chừng một chuỗi chẩn đoán mà bấm ✕ rồi
+      // mất luôn kết quả các bước trước là thứ không ai muốn. Phiên còn sống thì pill hiện lên
+      // và vẫn báo "đang chờ bạn duyệt"; muốn dừng thật thì có nút Dừng trong phiên.
+      onClose={() => onClose?.()}
+      closeHint={t('ai.diagnose.minimizeHint')}
+      headerExtra={<OpenInTabButton kind="ai-diagnose" onDone={onClose} />}
+    >
+      {body}
+    </AiDock>
   )
 }
 
@@ -146,7 +137,7 @@ function SessionView({
   onApprove,
   onSkip,
   onStop,
-  onNew
+  onNew,
 }: {
   onApprove: () => void
   onSkip: () => void
@@ -192,13 +183,9 @@ function SessionView({
           </div>
         )}
 
-        {session.status === 'error' && (
-          <p className="text-danger text-xs break-words">{session.error}</p>
-        )}
+        {session.status === 'error' && <p className="text-danger text-xs break-words">{session.error}</p>}
 
-        {session.status === 'stopped' && (
-          <p className="text-subtle text-xs">{t('ai.diagnose.stopped')}</p>
-        )}
+        {session.status === 'stopped' && <p className="text-subtle text-xs">{t('ai.diagnose.stopped')}</p>}
       </div>
 
       <div className="flex justify-between gap-2">
@@ -218,7 +205,7 @@ function SessionView({
 function HistoryItem({
   rec,
   onOpen,
-  onDelete
+  onDelete,
 }: {
   rec: AiDiagnoseRecordDto
   onOpen: () => void
@@ -231,8 +218,7 @@ function HistoryItem({
       : rec.status === 'stopped'
         ? t('ai.diagnose.statusStopped')
         : t('ai.diagnose.statusError')
-  const statusCls =
-    rec.status === 'done' ? 'text-success' : rec.status === 'stopped' ? 'text-subtle' : 'text-danger'
+  const statusCls = rec.status === 'done' ? 'text-success' : rec.status === 'stopped' ? 'text-subtle' : 'text-danger'
   return (
     <div className="border-edge hover:border-edge-strong group rounded border px-2.5 py-2">
       <div className="flex items-start justify-between gap-2">
@@ -245,7 +231,12 @@ function HistoryItem({
           {rec.conclusionSnippet && (
             <p
               className="text-muted mt-0.5 text-[10px] leading-snug"
-              style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+              style={{
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
             >
               {rec.conclusionSnippet}…
             </p>
@@ -270,7 +261,7 @@ function StepCard({
   index,
   step,
   onApprove,
-  onSkip
+  onSkip,
 }: {
   index: number
   step: DiagnoseStep
@@ -305,7 +296,9 @@ function StepCard({
       {step.status === 'running' && <p className="text-muted mt-1.5 text-[11px]">{t('ai.diagnose.running')}</p>}
       {step.status === 'skipped' && <p className="text-subtle mt-1.5 text-[11px]">{t('ai.diagnose.skipped')}</p>}
       {step.status === 'blocked' && (
-        <p className="text-danger mt-1.5 text-[11px]">⛔ {t('ai.diagnose.blocked')}: {step.blockedReason}</p>
+        <p className="text-danger mt-1.5 text-[11px]">
+          ⛔ {t('ai.diagnose.blocked')}: {step.blockedReason}
+        </p>
       )}
       {step.status === 'error' && <p className="text-danger mt-1.5 text-[11px] break-words">{step.error}</p>}
       {step.status === 'done' && step.output !== undefined && (

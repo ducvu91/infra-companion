@@ -39,7 +39,7 @@ export function registerPluginsIpc(
 
   // Thiếu file worker (build lỗi) → vẫn đăng ký handler trả rỗng để renderer không vỡ.
   if (!existsSync(workerPath)) {
-    console.error('[plugins] thiếu', workerPath, '— Plugin system tắt')
+    console.error('[plugins] missing', workerPath, '- plugin system disabled')
     ipcMain.handle(IPC.PLUGINS_LIST, (): PluginInfoDto[] => [])
     ipcMain.handle(IPC.PLUGINS_SET_ENABLED, (): PluginInfoDto[] => [])
     ipcMain.handle(IPC.PLUGINS_RELOAD, (): PluginInfoDto[] => [])

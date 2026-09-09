@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { AiDiagnoseModal } from './AiDiagnoseModal'
+import { AiModal } from './AiModal'
 import { HelpModal } from './HelpModal'
 import { ProcessesModal } from './ProcessesModal'
 import { ReplicationModal } from './ReplicationModal'
@@ -32,14 +33,15 @@ import type { ToolTabKind } from '../stores/tabs'
  */
 const TOOLS: Partial<Record<ToolTabKind, { icon: string; titleKey: I18nKey; render: () => ReactNode }>> = {
   tunnels: { icon: '🔀', titleKey: 'tunnel.title', render: () => <TunnelsModal embedded /> },
-  processes: { icon: '📋', titleKey: 'procs.title', render: () => <ProcessesModal embedded /> },
-  services: { icon: '⚙', titleKey: 'svc.title', render: () => <ServicesModal embedded /> },
+  processes: { icon: '📃', titleKey: 'procs.title', render: () => <ProcessesModal embedded /> },
+  services: { icon: '🧰', titleKey: 'svc.title', render: () => <ServicesModal embedded /> },
+  ai: { icon: '✨', titleKey: 'ai.title', render: () => <AiModal embedded /> },
   'ai-diagnose': { icon: '🩺', titleKey: 'ai.diagnose.title', render: () => <AiDiagnoseModal embedded /> },
   replication: { icon: '🔁', titleKey: 'repl.title', render: () => <ReplicationModal embedded /> },
   help: { icon: '❓', titleKey: 'help.title', render: () => <HelpModal embedded /> },
   'log-tail': { icon: '🪵', titleKey: 'tail.title', render: () => <LogTailModal embedded /> },
   cron: { icon: '⏰', titleKey: 'cron.title', render: () => <CronModal embedded /> },
-  'key-rotate': { icon: '🔄', titleKey: 'rotate.title', render: () => <KeyRotateModal embedded /> },
+  'key-rotate': { icon: '♻️', titleKey: 'rotate.title', render: () => <KeyRotateModal embedded /> },
   'disk-usage': { icon: '💾', titleKey: 'disk.title', render: () => <DiskUsageModal host={null} embedded /> },
   'pkg-updates': { icon: '📦', titleKey: 'pkg.title', render: () => <PackageUpdatesModal embedded /> },
   'known-hosts': { icon: '🔏', titleKey: 'knownHosts.title', render: () => <KnownHostsModal embedded /> },
@@ -47,9 +49,9 @@ const TOOLS: Partial<Record<ToolTabKind, { icon: string; titleKey: I18nKey; rend
   'http-checks': { icon: '🌐', titleKey: 'http.title', render: () => <HttpChecksModal embedded /> },
   inventory: { icon: '📇', titleKey: 'inv.title', render: () => <InventoryModal embedded /> },
   runbooks: { icon: '📖', titleKey: 'runbooks.title', render: () => <RunbooksModal embedded /> },
-  jobs: { icon: '⏰', titleKey: 'jobs.title', render: () => <JobsModal embedded /> },
+  jobs: { icon: '🗓️', titleKey: 'jobs.title', render: () => <JobsModal embedded /> },
   security: { icon: '🛡️', titleKey: 'sec.title', render: () => <SecurityAuditModal embedded /> },
-  'folder-sync': { icon: '🔄', titleKey: 'folderSync.title', render: () => <FolderSyncModal embedded /> }
+  'folder-sync': { icon: '🧲', titleKey: 'folderSync.title', render: () => <FolderSyncModal embedded /> }
 }
 
 export function ToolTabView({ kind, active }: { kind: ToolTabKind; active: boolean }) {

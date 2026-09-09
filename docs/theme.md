@@ -26,7 +26,17 @@ hai chỗ đó + một ô chọn kèm hình xem trước trong `SettingsModal` (
 > state `ui.workbenchPanel` / `ui.workbenchPanelWidth`, `Sidebar fluid`, khối SidebarBlocks có prop `limit`,
 > lệnh palette `wb-*`, hình xem trước. **v0.2.22:** panel đáy (`BottomPanel.tsx`, 3 tab, `Ctrl+J`, nút ⬒ trên
 > activity bar, palette `wb-bottom-*`; Monitoring ở theme này vào panel thay dock nổi — quyết định 3 nghiêng
-> về "một chỗ thôi" đã chọn). **Chưa làm:** pill AI chẩn đoán vào panel đáy; quyết định 2 (Dashboard vẫn là home).
+> về "một chỗ thôi" đã chọn). **v0.2.25 — hai lỗi phát hiện khi dùng thật:** (1) **danh sách host không
+> cuộn được** — `Sidebar fluid` thiếu `h-full min-h-0 flex-1`, mà `min-height:auto` mặc định của flex item
+> cho nó cao bằng nội dung nên khu `flex-1 overflow-y-auto` bên trong **không có trần để cuộn**: fleet
+> nhiều host thì mấy host cuối tràn khỏi panel và không cách nào tới được (nhánh không-fluid không bị vì
+> nó là con trực tiếp của `flex min-h-0 flex-1` ở App); thêm luôn `shrink-0` cho hàng ô tìm và hàng nút
+> đáy để danh sách dài không bóp chúng. (2) **panel đáy không có cách nào tự lộ ra** — mặc định đóng,
+> mà chỗ bật duy nhất là icon `⬒` không nhãn ở đáy activity bar, tức phải đoán ra là có panel rồi mới đi
+> tìm nút; nay có nút **⬒ Panel có CHỮ trên StatusBar** (chỉ theme này) và `Ctrl+J` đã vào
+> `lib/shortcutList.ts` → hiện ở cheat sheet Dashboard + thẻ Phím tắt của Trợ giúp — đó mới là nơi người
+> ta đến tra khi không tìm được đường vào. **Chưa làm:** pill AI chẩn đoán vào panel đáy; quyết định 2
+> (Dashboard vẫn là home).
 
 **Một câu:** thanh icon dọc bên trái chọn *panel phụ* hiện gì, panel phụ nằm cạnh, còn vùng chính
 **luôn là terminal**. Duyệt danh bạ mà không phải rời màn hình đang làm việc.

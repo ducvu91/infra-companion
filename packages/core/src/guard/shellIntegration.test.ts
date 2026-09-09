@@ -2,9 +2,11 @@ import { describe, expect, test } from 'vitest'
 import {
   NOTIFY_MIN_DURATION_MS,
   OSC133_BASH_SNIPPET,
+  OSC133_MARKER,
   commandSucceeded,
   formatDuration,
   parseOsc133,
+  osc133InstallCommand,
   shortenCommand,
   shouldNotify
 } from '@infra/shared'
@@ -115,5 +117,46 @@ describe('OSC133_BASH_SNIPPET', () => {
 
   test('KHÔNG dùng $(...) ở tầng ngoài — phải đi qua được hop login-script (§4)', () => {
     expect(OSC133_BASH_SNIPPET).not.toMatch(/\$\(/)
+  })
+})
+
+describe('osc133InstallCommand — cài bền vào ~/.bashrc', () => {
+  test('ghi vào ~/.bashrc, KHÔNG phải .bash_profile', () => {
+    // Phiên SSH không-đăng-nhập chỉ đọc `.bashrc`; ghi vào `.bash_profile` là cài xong mà
+    // không có tác dụng — đúng loại "xanh nhưng không hoạt động" của §8.
+    const cmd = osc133InstallCommand()
+    expect(cmd).toContain('~/.bashrc')
+    expect(cmd).not.toContain('.bash_profile')
+  })
+
+  test('kiểm marker TRƯỚC khi ghi — bấm hai lần không nhân đôi', () => {
+    const cmd = osc133InstallCommand()
+    expect(cmd).toContain(`grep -q '${OSC133_MARKER}'`)
+    // Nhánh "đã có" phải nói ra, không im lặng: user bấm nút mà không thấy gì thì bấm tiếp.
+    expect(cmd).toMatch(/echo '[^']*da co san/)
+  })
+
+  test('mang đủ nội dung snippet và cả hai marker bao quanh', () => {
+    const cmd = osc133InstallCommand()
+    expect(cmd).toContain('__ic_osc133')
+    for (const mark of ['133;A', '133;B', '133;C', '133;D']) expect(cmd, mark).toContain(mark)
+    expect(cmd).toContain(OSC133_MARKER)
+    expect(cmd).toContain('# <<< Infra Companion shell integration <<<')
+  })
+
+  test('heredoc CÓ QUOTE — `$?`/`$PS1` không bị nội suy trên đường truyền', () => {
+    // `<<IC_EOF` (không quote) sẽ khiến shell thay `$?` bằng exit code hiện tại NGAY LÚC GHI,
+    // và `.bashrc` nhận về một con số cứng thay vì biến → exit code báo sai vĩnh viễn.
+    expect(osc133InstallCommand()).toContain("<<'IC_EOF'")
+  })
+
+  test('thông báo echo KHÔNG DẤU — locale máy remote thường là C/POSIX', () => {
+    const echoes = osc133InstallCommand().match(/echo '[^']*'/g) ?? []
+    expect(echoes.length).toBeGreaterThan(0)
+    for (const line of echoes) {
+      expect(line, line).not.toMatch(
+        /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i
+      )
+    }
   })
 })

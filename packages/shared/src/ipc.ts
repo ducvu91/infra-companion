@@ -398,7 +398,16 @@ export const IPC = {
   /** Bật/tắt theo dõi thư mục local của một cặp. */
   FOLDERSYNC_WATCH: 'folder-sync:watch',
   /** main → renderer: trạng thái watch / file vừa đẩy / lỗi. */
-  FOLDERSYNC_EVENT: 'folder-sync:event'
+  FOLDERSYNC_EVENT: 'folder-sync:event',
+
+  // ── F24: lịch sử lệnh theo host (ô tìm Ctrl+Shift+R) ─────────────────────
+  CMDHIST_ADD: 'cmd-history:add',
+  CMDHIST_LIST: 'cmd-history:list',
+  CMDHIST_DELETE: 'cmd-history:delete',
+  CMDHIST_CLEAR: 'cmd-history:clear',
+  /** Xuất ra file JSON — lịch sử KHÔNG đi qua sync, đây là đường mang sang máy khác. */
+  CMDHIST_EXPORT: 'cmd-history:export',
+  CMDHIST_IMPORT: 'cmd-history:import'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

@@ -5,6 +5,7 @@ import { registerUpdaterIpc } from './ipc/updater'
 import { registerAiIpc } from './ipc/ai'
 import { registerBulkIpc } from './ipc/bulk'
 import { registerDataIpc } from './ipc/data'
+import { registerCommandHistoryIpc } from './ipc/commandHistory'
 import { registerImportIpc } from './ipc/import'
 import { registerDigitalOceanIpc } from './ipc/digitalocean'
 import { registerCloudImportIpc } from './ipc/cloudImport'
@@ -269,6 +270,7 @@ if (process.platform === 'win32') {
 registerPromptIpc()
 registerVaultIpc()
 registerDataIpc()
+registerCommandHistoryIpc()
 registerImportIpc()
 registerDigitalOceanIpc()
 registerCloudImportIpc()

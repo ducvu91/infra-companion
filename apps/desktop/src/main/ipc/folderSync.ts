@@ -93,7 +93,7 @@ function savePairs(): void {
   try {
     writeFileSync(configPath(), JSON.stringify(pairs, null, 2), 'utf8')
   } catch (error) {
-    console.error('[folder-sync] không ghi được cấu hình:', error instanceof Error ? error.message : error)
+    console.error('[folder-sync] cannot write config:', error instanceof Error ? error.message : error)
   }
 }
 

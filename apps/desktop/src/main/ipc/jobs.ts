@@ -75,7 +75,7 @@ function saveJobs(): void {
   try {
     writeFileSync(configPath(), JSON.stringify(jobs, null, 2), 'utf8')
   } catch (error) {
-    console.error('[jobs] không ghi được cấu hình:', error instanceof Error ? error.message : error)
+    console.error('[jobs] cannot write config:', error instanceof Error ? error.message : error)
   }
 }
 
@@ -239,7 +239,7 @@ async function tick(): Promise<void> {
     try {
       await runJob(job, false)
     } catch (error) {
-      console.error('[jobs] lượt chạy lỗi:', error instanceof Error ? error.message : error)
+      console.error('[jobs] run failed:', error instanceof Error ? error.message : error)
     }
   }
 }

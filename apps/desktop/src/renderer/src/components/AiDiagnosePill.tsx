@@ -5,7 +5,7 @@ import { useUiStore } from '../stores/ui'
 /**
  * F48 — pill hiện khi cửa sổ AI chẩn đoán được thu nhỏ (aiDiagnoseMin). Session vẫn chạy
  * nền trong store aiDiagnose; pill phản ánh trạng thái live để user biết khi nào cần quay lại
- * (đặc biệt lúc 'awaiting' = AI đã đề xuất lệnh, chờ duyệt). Bấm thân pill → bung lại modal;
+ * (đặc biệt lúc 'awaiting' = AI đã đề xuất lệnh, chờ duyệt). Bấm thân pill → mở lại DOCK;
  * bấm ✕ → chỉ đóng pill (KHÔNG dừng session — mở lại qua menu/palette vẫn thấy phiên).
  * Neo bottom-20 right-3 để xếp TRÊN pill Monitor (bottom-8 right-3), không đè nhau.
  */

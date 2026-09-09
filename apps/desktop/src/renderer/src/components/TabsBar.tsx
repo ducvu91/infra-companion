@@ -12,18 +12,19 @@ import { useT } from '../i18n'
 /** Nhãn + icon của các tab CÔNG CỤ (tab không giữ session; xem TOOL_TAB_KINDS). */
 const TOOL_TAB_META: Record<ToolTabKind, { label: string; icon: string }> = {
   monitor: { label: 'Monitoring', icon: '📊' },
-  compare: { label: 'Compare', icon: '🔍' },
+  compare: { label: 'Compare', icon: '⚖️' },
   localdev: { label: 'Local dev', icon: '🧱' },
   tunnels: { label: 'Tunnels', icon: '🔀' },
-  processes: { label: 'Processes', icon: '📋' },
-  services: { label: 'Services', icon: '⚙' },
+  processes: { label: 'Processes', icon: '📃' },
+  services: { label: 'Services', icon: '🧰' },
+  ai: { label: 'AI assistant', icon: '✨' },
   'ai-diagnose': { label: 'AI diagnose', icon: '🩺' },
   replication: { label: 'Replication', icon: '🔁' },
   help: { label: 'Help', icon: '❓' },
   features: { label: 'Tính năng', icon: '⊞' },
   'log-tail': { label: 'Log', icon: '🪵' },
   cron: { label: 'Cron', icon: '⏰' },
-  'key-rotate': { label: 'Key rotate', icon: '🔄' },
+  'key-rotate': { label: 'Key rotate', icon: '♻️' },
   'disk-usage': { label: 'Disk', icon: '💾' },
   'pkg-updates': { label: 'Updates', icon: '📦' },
   'known-hosts': { label: 'Fingerprints', icon: '🔏' },
@@ -32,9 +33,9 @@ const TOOL_TAB_META: Record<ToolTabKind, { label: string; icon: string }> = {
   'http-checks': { label: 'URL', icon: '🌐' },
   inventory: { label: 'Inventory', icon: '📇' },
   runbooks: { label: 'Runbooks', icon: '📖' },
-  jobs: { label: 'Scheduled', icon: '⏰' },
+  jobs: { label: 'Scheduled', icon: '🗓️' },
   security: { label: 'Security', icon: '🛡️' },
-  'folder-sync': { label: 'Folder sync', icon: '🔄' }
+  'folder-sync': { label: 'Folder sync', icon: '🧲' }
 }
 
 function toolMeta(kind: AppTab['kind']): { label: string; icon: string } | undefined {

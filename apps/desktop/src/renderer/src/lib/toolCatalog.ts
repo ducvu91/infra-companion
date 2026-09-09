@@ -75,6 +75,16 @@ export const TOOLS: readonly ToolEntry[] = [
   // --- Phiên làm việc: dùng hằng ngày, giữ trong menu ---
   { id: 'workspaces', menuKey: 'menu.workspaces', descKey: 'features.dWorkspaces', category: 'session', modal: 'workspaces', common: true },
   { id: 'snippets', menuKey: 'menu.snippets', descKey: 'features.dSnippets', category: 'session', modal: 'snippets', common: true },
+  // Cùng nhóm "dùng hằng ngày khi đang ở terminal" với Snippets/Tunnels/SFTP, nên `common: true`
+  // để ở lại menu ⋯ — menu là đường vào duy nhất khi đang trong tab terminal.
+  {
+    id: 'cmd-history',
+    menuKey: 'menu.cmdHistory',
+    descKey: 'features.dCmdHistory',
+    category: 'session',
+    modal: 'cmd-history',
+    common: true
+  },
   { id: 'tunnels', menuKey: 'menu.tunnels', descKey: 'features.dTunnels', category: 'session', modal: 'tunnels', common: true },
   // Trang SFTP: mở TAB (theme Infra) hoặc chuyển mục 📁 SFTP (theme Navigator) — xem openTool
   { id: 'sftp', menuKey: 'menu.sftp', descKey: 'features.dSftp', category: 'session', tab: 'files', common: true },

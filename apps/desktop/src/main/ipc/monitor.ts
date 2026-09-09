@@ -66,7 +66,7 @@ export function registerMonitorIpc(): () => void {
     if (settings.webhookUrl) {
       const req = buildWebhookRequest(settings.webhookUrl, dto)
       // fire-and-forget, KHÔNG retry — cooldown 15' của engine đã chặn storm
-      if (req) void postWebhook(req).catch((e) => console.error('[monitor] webhook lỗi:', (e as Error).message))
+      if (req) void postWebhook(req).catch((e) => console.error('[monitor] webhook failed:', (e as Error).message))
     }
   }
 

@@ -31,7 +31,13 @@ export const APP_SHORTCUTS: ReadonlyArray<ShortcutEntry> = [
   { key: 'dashboard.sc.split', combo: ['Ctrl', 'Shift', 'D'] },
   { key: 'dashboard.sc.broadcast', combo: ['Ctrl', 'Shift', 'B'] },
   { key: 'dashboard.sc.sidebar', combo: ['Ctrl', 'Shift', 'H'] },
-  { key: 'dashboard.sc.ai', combo: ['Ctrl', 'I'] }
+  { key: 'dashboard.sc.ai', combo: ['Ctrl', 'I'] },
+  // F24 — ô tìm lệnh đã chạy. Ctrl+Shift+R chứ không Ctrl+R: Ctrl+R để dành cho
+  // reverse-search của bash trong terminal.
+  { key: 'cmdHistory.title', combo: ['Ctrl', 'Shift', 'R'] },
+  // Panel đáy của theme Workbench. Thiếu ở đây suốt từ v0.2.22 — mà đó chính là chỗ người ta
+  // đến tra khi không biết mở panel bằng gì.
+  { key: 'dashboard.sc.bottomPanel', combo: ['Ctrl', 'J'] }
 ]
 
 /** Nhãn i18n của 4 hành động terminal — dùng lại khoá đã có ở màn hình Cài đặt. */

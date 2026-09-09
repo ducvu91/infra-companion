@@ -8,6 +8,7 @@ import type {
   AiDiagnoseSaveInput,
   AiDiagnoseStepDto,
   AuthType,
+  CommandHistoryEntry,
   GroupDto,
   GroupInput,
   HistoryEntry,
@@ -1236,6 +1237,167 @@ export class VaultService {
     } catch {
       return null
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // F24 — lịch sử LỆNH theo host (vault v19).
+  //
+  // Nội dung lệnh mã hoá bằng DEK; metadata (host, exit code, thời lượng, mốc giờ) để cột
+  // thường để lọc/xếp được mà không phải giải mã cả bảng. KHÔNG nằm trong sync — xem ghi chú
+  // ở migration v19. Cap toàn cục để một fleet gõ nhiều năm không làm phình vault.
+  // -------------------------------------------------------------------------
+
+  /** Trần số dòng giữ lại. 5000 lệnh đủ cho nhiều tháng làm việc mà vault vẫn nhỏ. */
+  private static readonly CMD_HISTORY_CAP = 5000
+
+  addCommandHistory(input: {
+    hostId: string | null
+    hostLabel: string
+    command: string
+    exitCode: number | null
+    durationMs: number
+    startedAt: number
+    /** Lệnh đã bị che một phần → không chạy lại nguyên văn được. */
+    redacted?: boolean
+  }, prune = true): string {
+    const db = this.ensureDb()
+    const dek = this.requireDek()
+    const id = randomUUID()
+    db.prepare(
+      `INSERT INTO command_history (id, host_id, host_label, command_enc, exit_code, duration_ms, started_at, redacted)
+       VALUES (?,?,?,?,?,?,?,?)`
+    ).run(
+      id,
+      input.hostId,
+      input.hostLabel,
+      encryptField(dek, input.command),
+      input.exitCode,
+      input.durationMs,
+      input.startedAt,
+      input.redacted === true ? 1 : 0
+    )
+    if (prune) this.pruneCommandHistory()
+    return id
+  }
+
+  /**
+   * Cắt bảng về đúng trần. Tách riêng và có ĐẾM TRƯỚC vì câu `NOT IN (SELECT … LIMIT 5000)`
+   * buộc SQLite dựng danh sách 5000 id rồi soi từng dòng — không index nào giúp được. Chạy nó
+   * sau *mỗi* lệnh user gõ (và × N pane khi broadcast) là công vô ích trên đường nóng: đếm
+   * trước bằng index thì gần như mọi lần chỉ tốn một câu COUNT.
+   */
+  private pruneCommandHistory(): void {
+    const db = this.ensureDb()
+    const row = db.prepare('SELECT COUNT(*) AS n FROM command_history').get() as { n: number }
+    if (Number(row.n) <= VaultService.CMD_HISTORY_CAP) return
+    db.prepare(
+      `DELETE FROM command_history WHERE id NOT IN (
+         SELECT id FROM command_history ORDER BY started_at DESC LIMIT ${VaultService.CMD_HISTORY_CAP}
+       )`
+    ).run()
+  }
+
+  /**
+   * Đọc lịch sử lệnh. `hostId` = null → mọi host (ô tìm mở ra là thấy tất cả, vì lệnh cần tìm
+   * thường được gõ ở một máy *khác* cùng vai trò).
+   *
+   * Dòng nào giải mã không được thì BỎ chứ không trả chuỗi rỗng: một dòng trống trong danh sách
+   * chạy lại được là mời người ta bấm vào cái không có nội dung.
+   */
+  listCommandHistory(options: { hostId?: string | null; limit?: number } = {}): CommandHistoryEntry[] {
+    const limit = options.limit ?? VaultService.CMD_HISTORY_CAP
+    const hostId = options.hostId ?? null
+    const db = this.ensureDb()
+    const columns = 'id, host_id, host_label, command_enc, exit_code, duration_ms, started_at, redacted'
+    // Hai câu tách rời chứ không nối mảng tham số động: nối mảng làm TS mất kiểu SQLInputValue,
+    // và một `undefined` lọt vào `.all()` là lỗi lúc chạy chứ không phải lúc dịch.
+    const rows = (
+      hostId === null
+        ? db.prepare(`SELECT ${columns} FROM command_history ORDER BY started_at DESC LIMIT ?`).all(limit)
+        : db
+            .prepare(
+              `SELECT ${columns} FROM command_history WHERE host_id = ? ORDER BY started_at DESC LIMIT ?`
+            )
+            .all(hostId, limit)
+    ) as Array<{
+      id: string
+      host_id: string | null
+      host_label: string
+      command_enc: string
+      exit_code: number | null
+      duration_ms: number
+      started_at: number
+      redacted: number
+    }>
+    const dek = this.requireDek()
+    const out: CommandHistoryEntry[] = []
+    for (const row of rows) {
+      const command = decryptField(dek, row.command_enc)
+      if (!command) continue
+      out.push({
+        id: row.id,
+        hostId: row.host_id,
+        hostLabel: row.host_label,
+        command,
+        exitCode: row.exit_code,
+        durationMs: row.duration_ms,
+        startedAt: row.started_at,
+        redacted: row.redacted === 1
+      })
+    }
+    return out
+  }
+
+  deleteCommandHistory(id: string): void {
+    this.ensureDb().prepare('DELETE FROM command_history WHERE id = ?').run(id)
+  }
+
+  /** Xoá sạch lịch sử lệnh — `hostId` cho phép xoá của đúng một máy. */
+  clearCommandHistory(hostId?: string | null): number {
+    const db = this.ensureDb()
+    const result =
+      hostId === undefined || hostId === null
+        ? db.prepare('DELETE FROM command_history').run()
+        : db.prepare('DELETE FROM command_history WHERE host_id = ?').run(hostId)
+    return Number(result.changes ?? 0)
+  }
+
+  /**
+   * Nhập từ file xuất. Trả số dòng thật sự thêm vào.
+   *
+   * Chống trùng theo (host_id, command, started_at) — nhập lại đúng file vừa xuất phải là
+   * không-làm-gì, không phải nhân đôi lịch sử. Không thể so bằng SQL trên `command_enc` (mỗi
+   * lần mã hoá ra chuỗi khác vì nonce khác), nên khoá trùng dựng từ bản đã giải mã trong bộ nhớ.
+   */
+  importCommandHistory(
+    // `redacted` tuỳ chọn: file do bản trước sinh ra không có cột này, và một bản nhập từ đó
+    // phải chạy được chứ không phải đỏ vì thiếu một cờ.
+    entries: readonly (Omit<CommandHistoryEntry, 'id' | 'redacted'> & { redacted?: boolean })[]
+  ): number {
+    const existing = new Set(
+      this.listCommandHistory().map((e) => `${e.hostId ?? ''}\u001f${e.startedAt}\u001f${e.command}`)
+    )
+    const db = this.ensureDb()
+    let added = 0
+    // MỘT transaction cho cả lô, và prune đúng MỘT lần ở cuối. Không có hai điều đó thì nhập
+    // một file 5000 dòng = 5000 lần quét toàn bảng, đồng bộ trong main process (node:sqlite là
+    // synchronous) → cửa sổ đóng băng; và một lỗi giữa đường để lại bản nhập nửa vời.
+    db.exec('BEGIN')
+    try {
+      for (const entry of entries) {
+        const key = `${entry.hostId ?? ''}\u001f${entry.startedAt}\u001f${entry.command}`
+        if (existing.has(key)) continue
+        existing.add(key)
+        this.addCommandHistory(entry, false)
+        added += 1
+      }
+      db.exec('COMMIT')
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+    this.pruneCommandHistory()
+    return added
   }
 
   // -------------------------------------------------------------------------

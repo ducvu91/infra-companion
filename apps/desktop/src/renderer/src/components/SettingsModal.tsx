@@ -23,7 +23,7 @@ import { LayoutGlyph } from './LayoutGlyph'
 import { LayoutPreview } from './LayoutPreview'
 import { MouseCursorSection } from './MouseCursorSection'
 import { TermFontSection } from './TermFontSection'
-import { Button, Field, TextArea, TextInput } from './ui'
+import { Button, ConfirmModal, Field, TextArea, TextInput } from './ui'
 import { useTrayStore } from '../stores/tray'
 import { OSC133_BASH_SNIPPET } from '@infra/shared'
 
@@ -151,8 +151,13 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
     shellMarksEnabled,
     setShellMarksEnabled,
     notifyLongCommands,
-    setNotifyLongCommands
+    setNotifyLongCommands,
+    commandHistoryEnabled,
+    setCommandHistoryEnabled
   } = useSettingsStore()
+
+  /** F24 — đang hỏi xác nhận xoá sạch lịch sử lệnh (mất dữ liệu, không hoàn lại). */
+  const [clearCmdHistory, setClearCmdHistory] = useState(false)
 
   const updateAlias = (i: number, patch: Partial<CommandAlias>): void =>
     setCommandAliases(commandAliases.map((a, idx) => (idx === i ? { ...a, ...patch } : a)))
@@ -737,6 +742,57 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
                 </Field>
                 <p className="text-subtle mb-4 text-[11px] leading-relaxed">{t('settings.notifyLongHint')}</p>
 
+                {/* F24 — lịch sử lệnh. Đặt ngay sau shell integration vì nó ĂN THEO: không có
+                    OSC 133 thì app không biết ranh giới lệnh, nên không ghi được gì. */}
+                <Field label={t('cmdHistory.settingLabel')}>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([true, false] as const).map((on) => (
+                      <button
+                        key={String(on)}
+                        onClick={() => setCommandHistoryEnabled(on)}
+                        className={`rounded border px-2 py-2 text-sm ${
+                          commandHistoryEnabled === on
+                            ? 'border-accent text-content bg-accent-soft/40'
+                            : 'border-edge text-muted hover:bg-hover'
+                        }`}
+                      >
+                        {on ? t('plugins.enable') : t('plugins.disable')}
+                      </button>
+                    ))}
+                  </div>
+                </Field>
+                <p className="text-subtle mb-2 text-[11px] leading-relaxed">{t('cmdHistory.settingHint')}</p>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Button
+                    onClick={() => {
+                      void window.infra.commandHistory.export(null).then((path) => {
+                        if (path) push(t('cmdHistory.exported', { path }), 'info')
+                      })
+                    }}
+                  >
+                    {t('cmdHistory.export')}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      void window.infra.commandHistory.import().then((result) => {
+                        // LUÔN 'info': `push` mặc định kind='error' nên `undefined` sẽ ra toast ĐỎ cho những
+                        // kết quả hoàn toàn bình thường — 'Đã huỷ', hay nhập lại đúng file vừa xuất
+                        // (added=0 vì chống trùng chạy đúng).
+                        if (result.message) push(result.message, 'info')
+                      })
+                    }}
+                  >
+                    {t('cmdHistory.import')}
+                  </Button>
+                  {/* Xoá sạch là mất dữ liệu, nên hỏi trước — cùng khuôn với các nút xoá khác. */}
+                  <Button
+                    variant="danger"
+                    onClick={() => setClearCmdHistory(true)}
+                  >
+                    {t('cmdHistory.clear')}
+                  </Button>
+                </div>
+
                 <p className="text-subtle mb-3 text-[11px] leading-relaxed">{t('settings.autocompleteHint')}</p>
                 <Field label={t('settings.autocompleteEnable')}>
                   <div className="grid grid-cols-2 gap-2">
@@ -920,6 +976,20 @@ export function SettingsModal({ onClose }: { onClose: () => void }) {
           </div>
         </main>
       </div>
+
+      {/* F24 — xoá sạch lịch sử lệnh: mất dữ liệu và không hoàn lại được nên hỏi trước. */}
+      {clearCmdHistory && (
+        <ConfirmModal
+          title={t('cmdHistory.clear')}
+          message={t('cmdHistory.clearConfirm')}
+          confirmLabel={t('cmdHistory.clear')}
+          onCancel={() => setClearCmdHistory(false)}
+          onConfirm={() => {
+            setClearCmdHistory(false)
+            void window.infra.commandHistory.clear(null).then((n) => push(t('cmdHistory.cleared', { n }), 'info'))
+          }}
+        />
+      )}
     </div>
   )
 }

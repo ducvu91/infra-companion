@@ -304,6 +304,36 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE hosts DROP COLUMN vpn_profile_id;
   DROP TABLE vpn_profiles;
+  `,
+  // v19 — F24: lịch sử LỆNH theo host. `command_enc` mã hoá bằng DEK vì một dòng lệnh mang
+  // nhiều thứ hơn cái nó viết: tên DB, đường dẫn nội bộ, đôi khi cả mật khẩu gõ inline (đã
+  // che ở `prepareForStore`, nhưng mã hoá là lớp thứ hai — che dựa trên mẫu thì luôn có mẫu
+  // chưa nghĩ tới).
+  //
+  // KHÔNG đưa vào sync (không có trong SYNC_TABLES): merge của snapshot so `updated_at` từng
+  // record để chọn bản mới hơn, còn đây là log CHỈ THÊM — mỗi lệnh là một record không bao giờ
+  // sửa, nên snapshot sẽ phình vô hạn theo số lệnh đã gõ mà chẳng merge được gì. Muốn mang
+  // sang máy khác thì dùng đường xuất/nhập FILE riêng.
+  //
+  // `host_id` không FK (như `diagnoses`): xoá host rồi vẫn muốn đọc lại lệnh đã chạy trên nó,
+  // nên `host_label` giữ tên lúc chạy.
+  //
+  // `redacted` là CỜ chứ không phải suy ra từ nội dung: nhận biết bằng cách tìm chuỗi thay chỗ
+  // trong lệnh thì mọi lần đổi chuỗi đó (hoặc dịch nó ra ngôn ngữ khác) sẽ làm cảnh báo "lệnh
+  // này không chạy lại được nguyên văn" lặng lẽ ngừng hoạt động với mọi bản ghi cũ.
+  `
+  CREATE TABLE command_history (
+    id          TEXT PRIMARY KEY,
+    host_id     TEXT,
+    host_label  TEXT NOT NULL,
+    command_enc TEXT NOT NULL,
+    exit_code   INTEGER,
+    duration_ms INTEGER NOT NULL,
+    started_at  INTEGER NOT NULL,
+    redacted    INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX idx_cmdhist_time ON command_history(started_at DESC);
+  CREATE INDEX idx_cmdhist_host ON command_history(host_id, started_at DESC);
   `
 ]
 

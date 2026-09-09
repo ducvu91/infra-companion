@@ -10,7 +10,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import { saveTermSnapshot, subscribeTermData, takeTermSnapshot } from '../../lib/termBus'
 import { matchGuard } from '../../lib/commandGuard'
 import { matchesCombo } from '../../lib/shortcuts'
-import { commandSucceeded, formatDuration, guardScope, parseOsc133, resolveProduction, typePhraseMatches, type CommandTarget, type GuardScope } from '@infra/shared'
+import { commandSucceeded, formatDuration, guardScope, parseOsc133, resolveProduction, stripPrompt, typePhraseMatches, type CommandTarget, type GuardScope } from '@infra/shared'
 import { useShellMarksStore } from '../../stores/shellMarks'
 import { useTabsStore, type Pane } from '../../stores/tabs'
 import { useAiExplainStore } from '../../stores/aiExplain'
@@ -111,6 +111,17 @@ function repaintGlyphs(term: Terminal | null, webgl: WebglAddon | null): void {
 export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: TerminalPaneProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
+  /**
+   * Số cột prompt chiếm, chốt ở mốc OSC 133;B — dùng để cắt prompt ra khỏi dòng lệnh khi thấy
+   * mốc C. null = shell chưa dán snippet shell integration, lúc đó `stripPrompt` tự đoán.
+   */
+  const promptColRef = useRef<number | null>(null)
+  /**
+   * F24 — dòng lệnh chốt lúc user bấm Enter, chờ mốc OSC 133;C tới để bắt đầu tính thời gian.
+   * Phải chốt ở Enter chứ không ở mốc C: lúc C tới thì tty đã echo CR+LF và con trỏ ở dòng
+   * trống, đọc buffer trả ''.
+   */
+  const pendingCommandRef = useRef<string | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const searchRef = useRef<SearchAddon | null>(null)
   const webglRef = useRef<WebglAddon | null>(null)
@@ -142,6 +153,12 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+
+    // Phiên MỚI (reconnect đổi `sessionId` tại chỗ, có thể sang host khác với prompt khác):
+    // hai ref này thuộc về phiên cũ. Ref sống ngoài effect nên không tự reset — để lại thì
+    // `stripPrompt` làm việc với cột của phiên trước.
+    promptColRef.current = null
+    pendingCommandRef.current = null
 
     const s0 = useSettingsStore.getState()
     const term = new Terminal({
@@ -246,8 +263,31 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
       const mark = parseOsc133(payload)
       if (!mark) return true
       const marks = useShellMarksStore.getState()
-      if (mark.kind === 'command-start') marks.onCommandStart(pane.sessionId)
-      else if (mark.kind === 'command-done') marks.onCommandDone(pane.sessionId, mark.exitCode, pane.subtitle ?? pane.title)
+      if (mark.kind === 'prompt-start') {
+        // Prompt MỚI bắt đầu in → cột của prompt cũ hết giá trị. Không xoá thì `PS1` chứa `\w`
+        // (mặc định gần như mọi distro) sẽ để lại cột dài hơn prompt mới sau một `cd /`, và
+        // `stripPrompt` cắt mất đầu lệnh — `echo rm -rf /` thành `-rf /`.
+        promptColRef.current = null
+      } else if (mark.kind === 'prompt-end') {
+        // Cột con trỏ tại mốc B = độ dài prompt VỪA in. Dùng để cắt prompt ra khỏi dòng lệnh
+        // lúc user bấm Enter (F24 chèn lệnh này ngược ra terminal nên phải sạch prompt).
+        promptColRef.current = term.buffer.active.cursorX
+      } else if (mark.kind === 'command-start') {
+        // Lệnh đã được chốt trong `handleInput` lúc user bấm Enter — xem ghi chú ở đó. Mốc C
+        // chỉ dùng để bắt đầu tính thời gian. `trap DEBUG` của bash phát C cho TỪNG lệnh con
+        // trong pipeline, nên chỉ nhận lệnh đang chờ MỘT lần rồi xoá: nếu không, `a | b | c`
+        // sẽ ghi lại `a | b | c` ba lần với thời lượng của từng đoạn.
+        const pending = pendingCommandRef.current
+        pendingCommandRef.current = null
+        marks.onCommandStart(pane.sessionId, pending ?? undefined)
+      } else if (mark.kind === 'command-done') {
+        marks.onCommandDone(
+          pane.sessionId,
+          mark.exitCode,
+          pane.subtitle ?? pane.title,
+          pane.origin?.kind === 'host' ? pane.origin.hostId : null
+        )
+      }
       return true
     })
 
@@ -495,6 +535,15 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
     if (data === '\r') {
       const { commandGuardEnabled, commandGuardPatterns } = useSettingsStore.getState()
       const term = termRef.current
+      // F24 — chốt dòng lệnh NGAY ĐÂY, không đợi mốc OSC 133;C.
+      //
+      // Đây là thời điểm DUY NHẤT con trỏ còn nằm trên dòng lệnh: bấm Enter thì tty echo CR+LF
+      // ngay (echo là việc của kernel, không đợi shell), nên tới lúc shell chạy `preexec`/
+      // `trap DEBUG` và phát mốc C thì con trỏ đã ở dòng mới TRỐNG — đọc buffer ở đó trả ''.
+      // Guard lệnh nguy hiểm ngay dưới đã đọc đúng chỗ này từ trước; F24 dùng cùng thời điểm.
+      if (term) {
+        pendingCommandRef.current = stripPrompt(readCurrentCommand(term), promptColRef.current ?? undefined)
+      }
       if (commandGuardEnabled && term) {
         const command = readCurrentCommand(term)
         const matched = command ? matchGuard(command, commandGuardPatterns) : null

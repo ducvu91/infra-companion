@@ -139,6 +139,14 @@ const api: InfraApi = {
     watch: (pairId, on) => ipcRenderer.invoke(IPC.FOLDERSYNC_WATCH, pairId, on),
     onEvent: (cb) => subscribe<FolderSyncEventDto>(IPC.FOLDERSYNC_EVENT, cb)
   },
+  commandHistory: {
+    add: (input) => ipcRenderer.invoke(IPC.CMDHIST_ADD, input),
+    list: (options) => ipcRenderer.invoke(IPC.CMDHIST_LIST, options),
+    remove: (id) => ipcRenderer.invoke(IPC.CMDHIST_DELETE, id),
+    clear: (hostId) => ipcRenderer.invoke(IPC.CMDHIST_CLEAR, hostId),
+    export: (hostId) => ipcRenderer.invoke(IPC.CMDHIST_EXPORT, hostId),
+    import: () => ipcRenderer.invoke(IPC.CMDHIST_IMPORT)
+  },
   runbooks: {
     listCustom: () => ipcRenderer.invoke(IPC.RUNBOOKS_LIST_CUSTOM),
     saveCustom: (runbook) => ipcRenderer.invoke(IPC.RUNBOOKS_SAVE_CUSTOM, runbook),

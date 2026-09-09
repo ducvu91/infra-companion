@@ -32,7 +32,7 @@ export function recordEvent(input: AppEventInput): AppEventDto | null {
     broadcast(IPC.EVENTS_NEW, dto)
     return dto
   } catch (error) {
-    console.error('[events] không ghi được sự kiện:', error instanceof Error ? error.message : error)
+    console.error('[events] cannot record event:', error instanceof Error ? error.message : error)
     return null
   }
 }

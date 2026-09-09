@@ -21,6 +21,14 @@ export type AppModal =
   | 'sync'
   | 'ai'
   | 'ai-diagnose'
+  /**
+   * F24 — ô tìm lệnh đã chạy. KHÔNG phải modal thật: `setModal` chuyển nó sang `cmdHistoryOpen`.
+   * Có mặt trong union này để vào được `toolCatalog` — nhờ đó nó xuất hiện ở menu ⋯, lưới công
+   * cụ Dashboard, tab "Tất cả tính năng" và panel Tools của Workbench, thay vì chỉ mở được
+   * bằng phím tắt (tính năng chỉ có phím tắt là tính năng người không đọc changelog không
+   * biết là có).
+   */
+  | 'cmd-history'
   | 'recordings'
   | 'settings'
   | 'workspaces'
@@ -73,6 +81,16 @@ export const WORKBENCH_BOTTOM_MIN = 120
 export const WORKBENCH_BOTTOM_MAX = 600
 const WORKBENCH_BOTTOM_DEFAULT = 240
 
+/**
+ * Cột dock Trợ lý AI — bên phải vùng làm việc, kiểu panel Claude Code trong VS Code.
+ *
+ * Dock CHIẾM CHỖ THẬT (terminal hẹp lại) chứ không nổi đè lên: một panel nổi vẫn che output đúng
+ * lúc đang đọc, mà đọc output là nửa còn lại của việc hỏi AI. Kéo mép trái để đổi bề rộng.
+ */
+export const AI_DOCK_MIN = 280
+export const AI_DOCK_MAX = 720
+const AI_DOCK_DEFAULT = 400
+
 interface UiState {
   modal: AppModal
   /** Theme Workbench: panel phụ đang hiện gì (nhớ qua localStorage). */
@@ -95,12 +113,31 @@ interface UiState {
   setNavSection: (s: NavSection) => void
   setModal: (m: AppModal) => void
   /**
-   * F48 — cửa sổ AI chẩn đoán đang thu nhỏ xuống pill (session vẫn chạy nền trong store
-   * aiDiagnose). Tách khỏi `modal` để khi thu nhỏ thì bỏ backdrop (app dùng được) mà
-   * vẫn còn pill để bung lại. Mở lại ('ai-diagnose') tự xoá cờ này.
+   * Trợ lý AI (F09) — DOCK cạnh terminal, nên có cờ riêng thay vì nằm trong `modal`.
+   *
+   * `modal` chỉ giữ được MỘT giá trị: để AI ở đó thì mở bất cứ hộp nào khác là AI bị đóng và
+   * câu hỏi đang gõ mất — đúng một nửa của cái "mở AI lên là không dùng được gì khác".
+   * `setModal('ai')` được chuyển hướng sang cờ này để mọi lối vào cũ vẫn hoạt động.
+   */
+  aiPanelOpen: boolean
+  setAiPanelOpen: (open: boolean) => void
+  /** Bề rộng cột dock Trợ lý AI (kéo mép trái để đổi, nhớ qua localStorage). */
+  aiDockWidth: number
+  setAiDockWidth: (px: number) => void
+  /**
+   * F48 — dock AI chẩn đoán đang mở. Cờ RIÊNG với `aiPanelOpen`: hai công cụ khác nhau, và mở
+   * cả hai cùng lúc là hợp lệ (hỏi cách đọc kết quả chẩn đoán chẳng hạn).
+   */
+  aiDiagnoseOpen: boolean
+  setAiDiagnoseOpen: (open: boolean) => void
+  /**
+   * F48 — dock chẩn đoán đã cất đi mà phiên VẪN CHẠY nền (store aiDiagnose) → hiện pill.
+   *
+   * Pill là thứ duy nhất còn báo "AI đã đề xuất lệnh, đang chờ bạn duyệt" khi dock đóng, nên nó
+   * vẫn cần dù dock (khác modal) không chặn gì cả. Mở lại ('ai-diagnose') tự xoá cờ này.
    */
   aiDiagnoseMin: boolean
-  /** Thu nhỏ cửa sổ chẩn đoán: ẩn modal (bỏ backdrop) + hiện pill. */
+  /** Cất dock chẩn đoán đi nhưng giữ pill — KHÔNG dừng phiên đang chạy. */
   minimizeAiDiagnose: () => void
   /** Đóng pill (không dừng session — mở lại qua menu/palette vẫn thấy phiên đang chạy). */
   setAiDiagnoseMin: (v: boolean) => void
@@ -111,12 +148,16 @@ interface UiState {
   paletteOpen: boolean
   setPaletteOpen: (v: boolean) => void
   togglePalette: () => void
+  /** F24 — ô tìm lệnh đã chạy (Ctrl+Shift+R). Cùng khuôn với palette để nút/menu cũng mở được. */
+  cmdHistoryOpen: boolean
+  setCmdHistoryOpen: (v: boolean) => void
 }
 
 const SIDEBAR_KEY = 'infra.sidebar.collapsed'
 const NAV_KEY = 'infra.nav.section'
 const WB_PANEL_KEY = 'infra.workbench.panel'
 const WB_WIDTH_KEY = 'infra.workbench.panelWidth'
+const AI_DOCK_WIDTH_KEY = 'infra.ai.dockWidth'
 const WB_BOTTOM_TAB_KEY = 'infra.workbench.bottom.tab'
 const WB_BOTTOM_OPEN_KEY = 'infra.workbench.bottom.open'
 const WB_BOTTOM_HEIGHT_KEY = 'infra.workbench.bottom.height'
@@ -149,6 +190,11 @@ function readWorkbenchWidth(): number {
   return Number.isFinite(n) && n >= WORKBENCH_PANEL_MIN && n <= WORKBENCH_PANEL_MAX ? Math.round(n) : WORKBENCH_PANEL_DEFAULT
 }
 
+function readAiDockWidth(): number {
+  const n = Number(localStorage.getItem(AI_DOCK_WIDTH_KEY))
+  return Number.isFinite(n) && n >= AI_DOCK_MIN && n <= AI_DOCK_MAX ? Math.round(n) : AI_DOCK_DEFAULT
+}
+
 /**
  * Mục mở app vào: chỉ nhận mục đang CÓ trên menu Navigator, còn lại về Hosts. Ca thật: bản
  * v0.2.20 nhớ `dashboard` (khi đó Dashboard mặc định bật), nay Dashboard mặc định tắt — mở app
@@ -174,7 +220,41 @@ export const useUiStore = create<UiState>((set) => ({
     // thì công cụ chưa có ô sẽ không bao giờ kiếm được điểm để giành ô.
     // `null` là ĐÓNG modal, không phải mở gì.
     if (modal !== null) useToolUsageStore.getState().record(modal)
-    set(modal === 'ai-diagnose' ? { modal, aiDiagnoseMin: false } : { modal })
+    // Trợ lý AI là PANEL ghim, không phải modal: nó phải sống song song với terminal VÀ với modal
+    // khác (mở Snippets giữa lúc đang hỏi AI thì câu hỏi không được biến mất). `modal` là một giá
+    // trị duy nhất nên không chứa được nó — chuyển sang cờ riêng ngay tại đây, chỗ mà MỌI lối vào
+    // (menu ⋯, palette, lưới công cụ, catalog, Ctrl+I) đều đi qua.
+    if (modal === 'ai') {
+      set({ aiPanelOpen: true })
+      return
+    }
+    // F24 — ô tìm lệnh cũng là overlay riêng, cùng lý do: nó mở ĐÈ lên mọi thứ rồi đóng ngay
+    // sau khi chọn, không nên chiếm chỗ của một hộp thoại đang mở.
+    if (modal === 'cmd-history') {
+      set({ cmdHistoryOpen: true })
+      return
+    }
+    // AI chẩn đoán cũng là DOCK: một phiên chạy nhiều bước, mỗi bước chờ user duyệt — có backdrop
+    // thì suốt phiên không xem được gì khác, kể cả terminal của chính máy đang chẩn đoán.
+    if (modal === 'ai-diagnose') {
+      set({ aiDiagnoseOpen: true, aiDiagnoseMin: false })
+      return
+    }
+    set({ modal })
+  },
+  aiPanelOpen: false,
+  setAiPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
+  aiDockWidth: readAiDockWidth(),
+  aiDiagnoseOpen: false,
+  setAiDiagnoseOpen: (aiDiagnoseOpen) => set({ aiDiagnoseOpen }),
+  setAiDockWidth: (px) => {
+    const aiDockWidth = Math.round(Math.min(AI_DOCK_MAX, Math.max(AI_DOCK_MIN, px)))
+    try {
+      localStorage.setItem(AI_DOCK_WIDTH_KEY, String(aiDockWidth))
+    } catch {
+      /* localStorage lỗi — chỉ mất persist */
+    }
+    set({ aiDockWidth })
   },
   navSection: readNavSection(),
   setNavSection: (navSection) => {
@@ -230,7 +310,9 @@ export const useUiStore = create<UiState>((set) => ({
     set({ workbenchBottomHeight })
   },
   aiDiagnoseMin: false,
-  minimizeAiDiagnose: () => set({ modal: null, aiDiagnoseMin: true }),
+  // "Thu nhỏ" giờ = đóng DOCK nhưng giữ pill: phiên vẫn chạy nền và pill là thứ duy nhất còn
+  // báo "AI đang chờ bạn duyệt lệnh" khi dock đã cất đi.
+  minimizeAiDiagnose: () => set({ aiDiagnoseOpen: false, aiDiagnoseMin: true }),
   setAiDiagnoseMin: (aiDiagnoseMin) => set({ aiDiagnoseMin }),
   sidebarCollapsed: localStorage.getItem(SIDEBAR_KEY) === '1',
   toggleSidebar: () =>
@@ -245,5 +327,7 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   paletteOpen: false,
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
-  togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen }))
+  togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
+  cmdHistoryOpen: false,
+  setCmdHistoryOpen: (cmdHistoryOpen) => set({ cmdHistoryOpen })
 }))

@@ -423,7 +423,7 @@ export function registerReplicationIpc(): () => void {
         payload: build.payload
       })
     } catch (error) {
-      console.error('[repl] không lưu được lịch sử so lệch:', error)
+      console.error('[repl] cannot save comparison history:', error)
     }
   }
 

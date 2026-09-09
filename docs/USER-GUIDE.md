@@ -661,6 +661,8 @@ The blob is a normal file in My Drive (`infra-companion-vault.blob`), so the bor
 
 **What it is**: generate commands from natural language, explain commands/errors. **4 providers**: Claude / OpenAI / Gemini / **Ollama (local — 100% private)**.
 
+**It is a docked column, not a window that blocks the app.** It sits on the right of the work area — the way an editor docks its assistant — and the column **takes real space, so the terminal narrows to make room rather than being covered**. That matters: half of asking about a server is reading its output. So the real loop works — ask, run the command, paste the error back, ask again — with the terminal still taking keystrokes the whole time. **Drag its left edge** to resize (280–720 px, remembered across restarts); `Ctrl+I` toggles it, **✕** closes it; available in all three layout themes. Inserting a command does **not** close it, and opening Snippets or Settings while a question is half-typed does not throw it away. `Esc` belongs to the terminal here, not to the column. **⊞ on the header opens the same assistant as a tab** — use it when the answer is long (a multi-line script, a table); the question you were typing comes along, and inserting a command from the tab switches you to the terminal that received it.
+
 **Configure** (⚙): pick a provider → model → API key (encrypted in the vault; Ollama needs no key).
 | Provider | Default model | Notes |
 |----------|---------------|-------|
@@ -670,7 +672,7 @@ The blob is a normal file in My Drive (`infra-companion-vault.blob`), so the bor
 | Ollama | `llama3.1` | local, needs `ollama serve` |
 
 **3 modes**:
-1. **Generate command** — type in plain language ("find the 5 biggest files in /var/log") → the AI returns a command + explanation → the **↵ Insert into terminal** button (writes to the open pane, **does NOT auto-run** — you review then press Enter).
+1. **Generate command** — type in plain language ("find the 5 biggest files in /var/log") → the AI returns a command + explanation → the **↵ Insert into terminal** button (writes to the open pane, **does NOT auto-run** — you review then press Enter). The line above that button names **which machine** it will go into, since the panel stays open while you switch tabs.
 2. **Explain command** — paste a command → a part-by-part explanation + risks.
 3. **Explain error** — paste output/an error → diagnosis + how to fix.
 
@@ -686,9 +688,11 @@ The blob is a normal file in My Drive (`infra-companion-vault.blob`), so the bor
 
 **Use**: open it from the **⋯ tools menu** (sidebar) → **🩺 AI troubleshooter**, or `Ctrl+Shift+P` → 🩺 → pick an SSH host → type the symptom ("web returns 502", "load is high") → **Start**. For each step: **Approve & run** / **Skip** / **Stop**. The conclusion appears at the end; **New diagnosis** resets.
 
-**⊞ Open in tab** (header, or the palette) moves the whole thing into a tab, so a diagnosis that takes several minutes doesn't block the rest of the app — the session keeps running while you work elsewhere and switch back. The **–** button still minimizes the popup to a pill if you prefer that.
+**It is a docked column** (right of the work area, like the AI assistant), not a window that blocks the app. That matters more here than anywhere else: a diagnosis runs **many steps and waits for you at each one**, so a blocking window would mean that for the whole session you cannot look at anything — including the terminal of the very machine being diagnosed. Drag the left edge to resize.
 
-**Minimize while it works**: the AI can take a while to think or run a command — press the **–** button in the window header to drop it to a small pill (bottom-right) and keep using the rest of the app. The pill shows live status (analyzing / running / **needs your approval** / done); click it to reopen. The session keeps running in the background regardless.
+**⊞ Open in tab** (header, or the palette) moves the whole thing into a tab — useful when step output gets long.
+
+**Closing it does not end the session.** ✕ just puts the column away; the run continues and a small **pill** (bottom-right) keeps reporting live status — analyzing / running / **needs your approval** / done — so a step waiting on you is never silent. Click the pill to bring the column back. To actually stop a run, use **Stop** inside the session.
 
 **History**: when a session finishes, stops, or errors it is saved automatically under **Diagnosis history** on the start screen (symptom, the steps that ran with their output, and the conclusion). Click a past session to review it **read-only**, or use 🗑 to delete it. The last 50 are kept, **encrypted with your vault key** (so the vault must be unlocked to read them back).
 
@@ -867,6 +871,22 @@ The result reads top-down, widest first:
 - The **ignore list** (`.git`, `node_modules`, `vendor`, `.env`, `*.log`… editable per pair) matches per path segment and supports only `*` and `?`. Keep `.env` on it so your local configuration never lands on the server. Paths that would escape the remote root are refused outright.
 
 **Test**: *+ New folder pair* → **Browse** for a local folder → pick a host → type the remote path (`/var/www/example.com`) → Save → **Compare**. Edit a file locally and compare again → it shows as *local is newer* in green; **Push changes** uploads it and the row becomes *identical*. Turn **Watch** on, save another file in your editor → *Just happened* under the table shows the upload within a second or two. Touch a file on the server → it shows *host is newer* in amber and stays that way.
+
+### 15P. Command history — `Ctrl+Shift+R`, or 🔎 Command history in the tools menu
+
+**Where to open it**: `Ctrl+Shift+R` toggles it; it is also **🔎 Command history** in the `⋯` tools menu, on the Dashboard tool grid, in the *All features* tab, and in the Workbench theme's Tools panel — plus the Command Palette. (A feature reachable only by a keyboard shortcut is a feature that people who did not read the changelog never find out exists.)
+
+**What it is**: every command that finishes on a host is recorded — the command, the machine, how long it took, its exit code — and stays searchable months later. It answers *"how did I do that on app-02 back then?"* even when the server's own `.bash_history` was wiped, rotated, or never written because the session ended in a disconnect, and it finds commands you typed on a **different** machine, which is usually what you are actually looking for.
+
+- **Needs shell integration**: the OSC 133 snippet is what tells the app where one command ends and the next begins. No snippet on that host, no history from it — and the search says so, with the snippet right there: **⚡ Install on the open host** appends it to `~/.bashrc` through the terminal you already have open (idempotent — press it twice and it tells you it is already there), **⧉ Copy** for pasting by hand or into Ansible/cloud-init for the whole fleet, **▸ Show the snippet** to read it first. Installing into `~/.bashrc` takes effect from the **next** session; to enable it in the session you are in, copy and paste it straight into the terminal. It is also in **Settings → Terminal → Shell integration**.
+- **The ranking** puts a match at the start of the command above one in the middle, the machine you are standing on above the same command elsewhere, and recent above old. Repeats collapse into one row that says how many times the command ran and on how many machines, so twenty `nginx -t` do not push out everything else. **All machines** is the default; the button switches to the current host only.
+- **Enter inserts the command into the terminal — it does not run it.** You read it and press Enter yourself. That is deliberate twice over: an old command may point at the wrong host or path, and the dangerous-command guard only gets its say when *you* press Enter.
+- **`Ctrl+R` is left alone.** In a terminal that is the remote shell's own reverse search, and taking it away would cost you a key you have used for years. The two run side by side.
+- **Passwords typed on the command line are redacted before storing.** `mysqldump -pSECRET`, `curl -u user:SECRET`, `--token …`, `--password=…`, `PASSWORD=`-style prefixes and an `Authorization: Bearer …` header in `curl -H` keep their shape but lose their value — quoted values (`-p"a b"`) included. Such a row is marked 🔒 and warns you when inserted, since it will not run as-is. Redaction works from patterns, so a form nobody thought of can still slip through: **✕ on a row removes that one command** without wiping the whole history. `-p` on anything else (`cp -pr`, `mkdir -p`, `docker run -p80:80`) is left untouched on purpose. The command text is encrypted with the vault key on top of that.
+- **It stays on this machine** — deliberately not part of vault sync (the sync merge picks the newer of two versions of one record, which means nothing for a log that only ever grows). **Settings → Terminal** has *Export to file* / *Import from file* for moving it deliberately; the exported JSON is **plain readable text**, so keep it out of shared folders. The same place turns recording off and clears what is stored.
+- The last **5000** commands are kept. Trivial ones (`ls`, `cd`, `pwd`, `clear`) are not recorded — retyping them is faster than finding them.
+
+**Test**: paste the OSC 133 snippet into `~/.bashrc` on a host, reconnect, run `systemctl status nginx`, then press `Ctrl+Shift+R` → the command is at the top with a green dot, its duration and the host name. Type `nginx` → it stays, unrelated commands go. Press Enter → the command appears at your prompt **without running**; press Enter yourself to run it. Run `mysql -pSECRET -e "select 1"` and search again → the row reads `-p<đã che>` and inserting it warns you to edit it first.
 
 ### 15K. Fleet inventory — *All features* → 📇 Fleet inventory
 
@@ -1127,6 +1147,8 @@ Four tabs, one for each question you actually arrive with.
 | `Ctrl+Shift+D` | Split an extra local pane |
 | `Ctrl+Shift+B` | Toggle Broadcast |
 | `Ctrl+Shift+H` | Collapse/expand the host sidebar (more room for the terminal) |
+| `Ctrl+Shift+R` | Search the commands you have run (see §15P) — `Ctrl+R` still reaches the remote shell |
+| `Ctrl+J` | Bottom panel — Monitoring / Log / Tunnels (Workbench theme only) |
 | `Ctrl+Tab` / `Ctrl+Shift+Tab` | Switch tabs |
 | `Ctrl+F` | Find in terminal |
 | `Ctrl+Shift+E` | AI-explain the selected terminal output |

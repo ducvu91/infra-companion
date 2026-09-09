@@ -195,11 +195,16 @@ export function Sidebar({ fluid = false }: { readonly fluid?: boolean } = {}) {
     <div
       className={
         fluid
-          ? 'flex w-full min-w-0 flex-col select-none'
+          ? // `min-h-0 flex-1` là phần BẮT BUỘC, không phải trang trí: nhúng vào panel Workbench thì
+            // cha là một flex-col, mà mặc định `min-height:auto` của flex item cho con cao bằng nội
+            // dung → khu danh sách bên dưới (`flex-1 overflow-y-auto`) không có trần nào để cuộn,
+            // nên fleet nhiều host thì các host cuối TRÀN ra khỏi panel và không cách nào tới được.
+            // Nhánh không-fluid không cần vì nó là con trực tiếp của `flex min-h-0 flex-1` ở App.
+            'flex h-full min-h-0 w-full min-w-0 flex-1 flex-col select-none'
           : 'border-edge bg-panel flex w-60 shrink-0 flex-col border-r select-none'
       }
     >
-      <div className="p-2">
+      <div className="shrink-0 p-2">
         <div className="flex items-center gap-1">
           <input
             value={query}
@@ -260,7 +265,7 @@ export function Sidebar({ fluid = false }: { readonly fluid?: boolean } = {}) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {/* Bố cục theo KHỐI: thứ tự và bật/tắt do user đặt (hộp ⚙ ở hàng ô tìm). Mặc định đúng
             bằng bố cục cũ — Yêu thích → nhóm host → Gần đây — nên ai không đụng gì thì không
             thấy khác gì. Khối "nhóm host" là khối đặc biệt duy nhất: nó tự chứa nhiều section
@@ -305,7 +310,7 @@ export function Sidebar({ fluid = false }: { readonly fluid?: boolean } = {}) {
         )}
       </div>
 
-      <div className="border-edge relative flex gap-1.5 border-t p-2" ref={menuRef}>
+      <div className="border-edge relative flex shrink-0 gap-1.5 border-t p-2" ref={menuRef}>
         <Button className="flex-1 !py-1 !text-xs" variant="primary" onClick={() => setModal({ kind: 'host', host: null })}>
           {t('sidebar.addHost')}
         </Button>

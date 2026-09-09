@@ -73,7 +73,12 @@ export const TOOL_TAB_KINDS = [
   /** Kiểm an ninh nhanh cả fleet. */
   'security',
   /** So lệch thư mục local ↔ remote — bảng rộng, hợp tab hơn popup. */
-  'folder-sync'
+  'folder-sync',
+  /**
+   * Trợ lý AI — mặc định là cột DOCK cạnh terminal; nút ⛶ mở nó thành TAB khi câu trả lời dài
+   * (một script nhiều dòng, một bảng so sánh) và cột 400px thành chỗ cuộn liên tục.
+   */
+  'ai'
 ] as const
 export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number]
 
