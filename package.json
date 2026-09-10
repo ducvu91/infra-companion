@@ -1,6 +1,6 @@
 {
   "name": "infra-companion",
-  "version": "0.2.25",
+  "version": "0.2.26",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "engines": {

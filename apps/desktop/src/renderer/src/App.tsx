@@ -45,8 +45,7 @@ import { LogTailModal } from './components/LogTailModal'
 import { CronModal } from './components/CronModal'
 import { KeyRotateModal } from './components/KeyRotateModal'
 import { PackageUpdatesModal } from './components/PackageUpdatesModal'
-import { AiModal } from './components/AiModal'
-import { AiDiagnoseModal } from './components/AiDiagnoseModal'
+import { AiDockHost } from './components/AiDock'
 import { AiDiagnosePill } from './components/AiDiagnosePill'
 import { RecordingsModal } from './components/RecordingsModal'
 import { SettingsModal } from './components/SettingsModal'
@@ -135,16 +134,12 @@ export default function App() {
   const bottomOpen = useUiStore((s) => s.workbenchBottomOpen)
   // Command Palette lên store chung để nút toolbar (TerminalTabView) cũng mở được
   const paletteOpen = useUiStore((s) => s.paletteOpen)
-  const aiPanelOpen = useUiStore((s) => s.aiPanelOpen)
-  const aiDiagnoseOpen = useUiStore((s) => s.aiDiagnoseOpen)
-  const setAiPanelOpen = useUiStore((s) => s.setAiPanelOpen)
   const cmdHistoryOpen = useUiStore((s) => s.cmdHistoryOpen)
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen)
   const togglePalette = useUiStore((s) => s.togglePalette)
   // store chung để Sidebar/palette cùng mở — tránh 2 instance modal dẫm chân nhau
   const modal = useUiStore((s) => s.modal)
   const setModal = useUiStore((s) => s.setModal)
-  const minimizeAiDiagnose = useUiStore((s) => s.minimizeAiDiagnose)
   const pluginPanel = usePluginStore((s) => s.panel)
   const monitorActive = useMonitorStore((s) => s.active)
   const monitorDetached = useMonitorStore((s) => s.detached)
@@ -637,14 +632,16 @@ export default function App() {
           {/* Workbench: panel đáy (Monitoring / Log / Tunnels) dưới vùng tab, Ctrl+J — terminal tự fit lại qua ResizeObserver */}
           {layout === 'workbench' && bottomOpen && <BottomPanel />}
         </div>
-        {/* Trợ lý AI — cột DOCK bên phải, nằm TRONG flex row nên nó chiếm chỗ thật và terminal
-            hẹp lại nhường chỗ (xterm tự fit qua ResizeObserver) thay vì bị che. Đặt ở đây, không
-            phải ở khối modal bên dưới: ui.modal chỉ giữ một giá trị nên mở Snippets giữa lúc đang
-            hỏi AI sẽ làm mất câu hỏi. Có ở CẢ BA theme — hỏi AI không phụ thuộc bố cục nào. */}
-        {aiPanelOpen && <AiModal onClose={() => setAiPanelOpen(false)} />}
-        {/* AI chẩn đoán — cũng là dock, cùng lý do (phiên nhiều bước, mỗi bước chờ duyệt).
-            Đóng dock KHÔNG dừng phiên: `minimizeAiDiagnose` để lại pill báo "đang chờ duyệt". */}
-        {aiDiagnoseOpen && <AiDiagnoseModal onClose={minimizeAiDiagnose} />}
+        {/* Hai công cụ AI — MỘT cột DOCK bên phải, chọn nhau bằng tab. Dock nằm TRONG flex row
+            nên nó chiếm chỗ thật và terminal hẹp lại nhường chỗ (xterm tự fit qua ResizeObserver)
+            thay vì bị che. Đặt ở đây, không phải ở khối modal bên dưới: ui.modal chỉ giữ một giá
+            trị nên mở Snippets giữa lúc đang hỏi AI sẽ làm mất câu hỏi. Có ở CẢ BA theme.
+
+            Mỗi panel tự chạy (giữ state của nó) nhưng KHÔNG tự vẽ khung — nó gọi `renderSpec` để
+            góp nội dung, còn `AiDockShell` mới quyết bề rộng và có vẽ thanh tab hay không. Gom
+            spec qua mảng chứ không lồng component: shell phải thấy CẢ HAI mới biết đang mở mấy
+            cái. Đóng AI chẩn đoán KHÔNG dừng phiên — `minimizeAiDiagnose` để lại pill "chờ duyệt". */}
+        <AiDockHost />
       </div>
       <StatusBar />
 

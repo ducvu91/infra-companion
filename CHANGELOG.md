@@ -5,6 +5,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.2.26] — 2026-09-10
+
+### Changed
+
+- **Both AI panels share one column with tabs, instead of opening a second column each.** Each docked column is 400px by default, so having the assistant and the troubleshooter open at once ate 800px and left the terminal a sliver — while both of them exist precisely so you can *watch the output while you ask*, which is the first thing that sliver takes away. They now sit in the same column, picked with a tab strip (**✨ Assistant** · **🩺 Diagnose**), and opening either one from the menu, the palette or `Ctrl+I` brings its tab to the front rather than appearing to do nothing because the column was already open on the other tab. The panel you are not looking at **stays alive** — a half-typed question and a diagnostic run waiting for approval are both still there when you switch back — and with only one of them open there is no tab strip at all, just the header as before. The tab strip also carries that panel's own buttons (**⛶ ⚙ ✕**), because a separate row holding three buttons is a row of a 400px column spent on nothing.
+- **The chat box is pinned to the bottom of the panel.** The question box used to sit *above* the answer inside one scrolling area, so every long answer pushed it further out of sight and asking a follow-up meant scrolling back up to find where to type. Answers now flow in the scrolling part and the box stays put at the bottom, the way a chat window works. New content scrolls into view on its own **only when you are already at the bottom** — if you have scrolled up to read the output of step 2, step 4 finishing no longer yanks the view away from you.
+- **The troubleshooter's *Approve & run* button no longer drifts down the page.** It used to live at the end of the step list, so each completed step pushed it further away and every approval in a long session started with a scroll. The pending command and its **Approve & run** / **Skip** buttons are now in the pinned bottom area, with the command repeated next to the buttons on purpose — it is about to run on a real machine, so it should be readable exactly where you click, not a scroll away. The step in the list above says it is waiting for approval below.
+- **⛶ *Open in tab* is an icon in the AI panels.** Next to `⚙` and `✕` in a column this narrow, the bordered *⊞ Open in tab* button took the space two tab labels needed. It keeps its label everywhere else — in the wide tool modals there is no shortage of room, and an unlabelled icon there would just be a guess.
+
+---
+
 ## [0.2.25] — 2026-09-09
 
 ### Added

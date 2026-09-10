@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { AiConfigDto, AiModeDto, AiProviderDto } from '@infra/shared'
 import { useT } from '../i18n'
 import { MiniMarkdown } from '../lib/miniMarkdown'
 import { terminalTargetPane, useTabsStore } from '../stores/tabs'
 import { errorMessage, useToastsStore } from '../stores/toasts'
-import { AiDock } from './AiDock'
+import type { AiDockPaneSpec } from './AiDock'
 import { OpenInTabButton } from './OpenInTabButton'
 import { Button, Field, Modal, Select, TextArea, TextInput } from './ui'
 
@@ -42,7 +42,20 @@ const BASEURL_HINT: Record<AiProviderDto, string> = {
  * Cấu hình (provider/model/API key) vẫn là **modal**: đó là form điền một lần, không phải thứ
  * cần dùng song song với terminal, và nó có ô mật khẩu — chặn màn hình lúc đó là đúng.
  */
-export function AiModal({ onClose, embedded }: { onClose?: () => void; embedded?: boolean }) {
+export function AiModal({
+  onClose,
+  embedded,
+  renderSpec,
+}: {
+  onClose?: () => void
+  embedded?: boolean
+  /**
+   * Chế độ dock: thay vì tự vẽ cột, panel đưa spec của mình lên `AiDockShell` để hai công cụ AI
+   * dùng chung một cột + thanh tab. Là hàm chứ không phải `<AiDock>` bọc ngoài vì shell phải biết
+   * TẤT CẢ panel đang mở mới quyết được có vẽ thanh tab hay không.
+   */
+  renderSpec?: (spec: AiDockPaneSpec) => ReactNode
+}) {
   const t = useT()
   const [config, setConfig] = useState<AiConfigDto | null>(null)
   const [showSettings, setShowSettings] = useState(false)
@@ -106,26 +119,74 @@ export function AiModal({ onClose, embedded }: { onClose?: () => void; embedded?
     if (embedded) useTabsStore.getState().setActive(target.tabId)
   }
 
-  if (showSettings) {
-    return (
-      <AiSettings
-        current={config}
-        // đã có config: "Đóng" quay về khung hỏi đáp (giữ câu trả lời đang xem); chưa có thì đóng hẳn
-        onClose={() => (config || embedded ? setShowSettings(false) : onClose?.())}
-        onSaved={(c) => {
-          setConfig(c)
-          setShowSettings(false)
-        }}
-      />
-    )
-  }
+  // Form cấu hình là `Modal` (overlay riêng) nên vẽ SONG SONG chứ không thay chỗ panel: ở chế độ
+  // dock, thay chỗ sẽ làm panel biến khỏi thanh tab suốt lúc mở form — tab tự nhiên mất rồi hiện
+  // lại. Vẽ song song thì dock đứng yên, form nổi lên trên.
+  const settings = showSettings ? (
+    <AiSettings
+      current={config}
+      // đã có config: "Đóng" quay về khung hỏi đáp (giữ câu trả lời đang xem); chưa có thì đóng hẳn
+      onClose={() => (config || embedded ? setShowSettings(false) : onClose?.())}
+      onSaved={(c) => {
+        setConfig(c)
+        setShowSettings(false)
+      }}
+    />
+  ) : null
 
+  /**
+   * Vùng CUỘN: model đang dùng + câu trả lời. Cố ý **không** chứa ô nhập — xem `composer`.
+   */
   const body = (
     <>
       <p className="text-subtle mb-2 text-[11px]">
         {config ? `${config.provider} · ${config.model}` : t('ai.notSetUp')}
       </p>
 
+      {answer ? (
+        <div className="border-edge bg-input rounded border p-3">
+          <MiniMarkdown source={answer.text} />
+          {answer.command && (
+            <div className="border-edge mt-2 border-t pt-2">
+              {/* Lệnh XUỐNG DÒNG, không `truncate`: cột dock hẹp nên một dòng `find … | sort …`
+                  bị cắt còn `find /var -xdev -type f -printf '%s %p\n' | so…` — mà đây là lệnh
+                  sắp chạy trên máy thật, đọc không hết thì không nên bấm. Thà cao thêm 2 dòng. */}
+              <code className="text-success block font-mono text-[11px] break-all whitespace-pre-wrap">
+                {answer.command}
+              </code>
+              <div className="mt-2 flex justify-end">
+                <Button
+                  variant="primary"
+                  className="!px-2 !py-1 !text-xs"
+                  disabled={!activePane}
+                  title={activePane ? t('ai.insertHint') : t('ai.insertNeedTab')}
+                  onClick={insertCommand}
+                >
+                  ↵ {t('ai.insert')}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        // Panel rỗng thì vùng cuộn trắng trơn, trông như chưa nạp xong. Một dòng nói việc cần làm
+        // là đủ; ví dụ cụ thể đã nằm ở placeholder của ô nhập ngay bên dưới.
+        !busy && <p className="text-subtle text-[11px] leading-relaxed">{t('ai.emptyHint')}</p>
+      )}
+
+      {busy && <p className="text-muted text-xs">{t('ai.asking')}</p>}
+    </>
+  )
+
+  /**
+   * Khe ĐÁY (`footer` của `AiDock`): chọn chế độ · ô nhập · máy đích · nút Hỏi.
+   *
+   * Trước đây cả khối này nằm TRÊN câu trả lời trong cùng một vùng cuộn, nên trả lời càng dài thì
+   * ô nhập càng bị đẩy lên khỏi tầm nhìn — hỏi tiếp là phải cuộn đi tìm chỗ gõ. Nay neo ở đáy như
+   * mọi khung chat: câu trả lời chảy phía trên, chỗ gõ đứng yên một chỗ.
+   */
+  const composer = (
+    <>
       <div className="mb-2 flex flex-wrap gap-1.5">
         {(['generate', 'explain', 'explain-error'] as AiModeDto[]).map((m) => (
           <button
@@ -178,81 +239,71 @@ export function AiModal({ onClose, embedded }: { onClose?: () => void; embedded?
           {busy ? t('ai.asking') : t('ai.ask')}
         </Button>
       </div>
-
-      {answer && (
-        <div className="border-edge bg-input mt-3 rounded border p-3">
-          <MiniMarkdown source={answer.text} />
-          {answer.command && (
-            <div className="border-edge mt-2 border-t pt-2">
-              {/* Lệnh XUỐNG DÒNG, không `truncate`: cột dock hẹp nên một dòng `find … | sort …`
-                  bị cắt còn `find /var -xdev -type f -printf '%s %p\n' | so…` — mà đây là lệnh
-                  sắp chạy trên máy thật, đọc không hết thì không nên bấm. Thà cao thêm 2 dòng. */}
-              <code className="text-success block font-mono text-[11px] break-all whitespace-pre-wrap">
-                {answer.command}
-              </code>
-              <div className="mt-2 flex justify-end">
-                <Button
-                  variant="primary"
-                  className="!px-2 !py-1 !text-xs"
-                  disabled={!activePane}
-                  title={activePane ? t('ai.insertHint') : t('ai.insertNeedTab')}
-                  onClick={insertCommand}
-                >
-                  ↵ {t('ai.insert')}
-                </Button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
     </>
   )
 
   // Chế độ TAB: nội dung chảy trong vùng tab, giới hạn bề rộng đọc cho dễ (dòng dài quá thì mắt
   // mất hàng) và có nút ⚙ ở góc vì tab không có header của dock.
+  //
+  // Cùng cách chia khe như dock — chỉ vùng câu trả lời cuộn, `composer` neo đáy tab. Ở tab thì
+  // trả lời còn dài hơn (đó là lý do có tab), nên để ô nhập trôi theo là sai hơn nữa.
   if (embedded) {
     return (
-      <div className="@container min-h-0 flex-1 overflow-y-auto px-4 py-3">
-        <div className="mx-auto w-full max-w-3xl">
-          <div className="mb-2 flex justify-end">
-            <button
-              className="border-edge-strong text-muted hover:bg-hover hover:text-content rounded border px-2 py-0.5 text-[11px]"
-              title={t('ai.configure')}
-              onClick={() => setShowSettings(true)}
-            >
-              ⚙ {t('ai.configure')}
-            </button>
+      <div className="@container flex min-h-0 flex-1 flex-col">
+        {settings}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
+          <div className="mx-auto w-full max-w-3xl">
+            <div className="mb-2 flex justify-end">
+              <button
+                className="border-edge-strong text-muted hover:bg-hover hover:text-content rounded border px-2 py-0.5 text-[11px]"
+                title={t('ai.configure')}
+                onClick={() => setShowSettings(true)}
+              >
+                ⚙ {t('ai.configure')}
+              </button>
+            </div>
+            {body}
           </div>
-          {body}
+        </div>
+        <div className="border-edge bg-panel shrink-0 border-t px-4 py-2.5">
+          <div className="mx-auto w-full max-w-3xl">{composer}</div>
         </div>
       </div>
     )
   }
 
-  return (
-    <AiDock
-      icon="✨"
-      title={t('ai.title')}
-      onClose={() => onClose?.()}
-      headerExtra={
-        <>
-          {/* ⛶ = phóng to thành TAB. Đóng dock ngay sau đó: để cả hai cùng mở thì có hai màn hình
-              AI với hai state khác nhau, và user không biết mình đang gõ vào cái nào. */}
-          <OpenInTabButton kind="ai" onDone={onClose} />
-          <button
-            className="text-subtle hover:text-content px-1 text-xs leading-none"
-            title={t('ai.configure')}
-            aria-label={t('ai.configure')}
-            onClick={() => setShowSettings(true)}
-          >
-            ⚙
-          </button>
-        </>
-      }
-    >
-      {body}
-    </AiDock>
-  )
+  // Chế độ DOCK: không tự vẽ khung mà trả spec lên `AiDockShell` — khung (bề rộng, thanh tab) là
+  // của chung hai công cụ AI, panel chỉ góp nội dung của mình.
+  return renderSpec?.({
+    id: 'ai',
+    icon: '✨',
+    title: t('ai.title'),
+    onClose: () => onClose?.(),
+    headerExtra: (
+      <>
+        {/* ⛶ = phóng to thành TAB. Đóng dock ngay sau đó: để cả hai cùng mở thì có hai màn hình
+            AI với hai state khác nhau, và user không biết mình đang gõ vào cái nào. */}
+        <OpenInTabButton kind="ai" onDone={onClose} compact />
+        <button
+          className="text-subtle hover:text-content px-1 text-xs leading-none"
+          title={t('ai.configure')}
+          aria-label={t('ai.configure')}
+          onClick={() => setShowSettings(true)}
+        >
+          ⚙
+        </button>
+      </>
+    ),
+    // `settings` là Modal `fixed` nên chỗ đặt trong cây không đổi vị trí hiển thị; gửi kèm footer
+    // để nó sống cùng vòng đời panel.
+    footer: (
+      <>
+        {settings}
+        {composer}
+      </>
+    ),
+    children: body,
+  })
 }
 
 function AiSettings({

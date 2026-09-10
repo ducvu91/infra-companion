@@ -91,6 +91,16 @@ export const AI_DOCK_MIN = 280
 export const AI_DOCK_MAX = 720
 const AI_DOCK_DEFAULT = 400
 
+/**
+ * Hai công cụ AI dùng CHUNG một cột dock, chọn bằng tab — không phải hai cột cạnh nhau.
+ *
+ * Mỗi cột rộng mặc định 400px, nên mở cả hai kiểu cột-riêng là ngốn 800px và terminal còn một
+ * mẩu — trong khi cả hai đều là thứ vừa-hỏi-vừa-nhìn-output, mất output thì mở ra làm gì. Tab
+ * cũng đúng với thói quen: người ta hỏi AI *hoặc* đang chẩn đoán, hiếm khi đọc cả hai cùng lúc.
+ * Panel không hiện vẫn `mounted` (chỉ ẩn bằng CSS) nên câu đang gõ và phiên chẩn đoán còn nguyên.
+ */
+export type AiDockTab = 'ai' | 'ai-diagnose'
+
 interface UiState {
   modal: AppModal
   /** Theme Workbench: panel phụ đang hiện gì (nhớ qua localStorage). */
@@ -124,6 +134,9 @@ interface UiState {
   /** Bề rộng cột dock Trợ lý AI (kéo mép trái để đổi, nhớ qua localStorage). */
   aiDockWidth: number
   setAiDockWidth: (px: number) => void
+  /** Tab đang hiện trong dock AI dùng chung. Chỉ có nghĩa khi cả hai panel cùng mở. */
+  aiDockTab: AiDockTab
+  setAiDockTab: (tab: AiDockTab) => void
   /**
    * F48 — dock AI chẩn đoán đang mở. Cờ RIÊNG với `aiPanelOpen`: hai công cụ khác nhau, và mở
    * cả hai cùng lúc là hợp lệ (hỏi cách đọc kết quả chẩn đoán chẳng hạn).
@@ -225,7 +238,7 @@ export const useUiStore = create<UiState>((set) => ({
     // trị duy nhất nên không chứa được nó — chuyển sang cờ riêng ngay tại đây, chỗ mà MỌI lối vào
     // (menu ⋯, palette, lưới công cụ, catalog, Ctrl+I) đều đi qua.
     if (modal === 'ai') {
-      set({ aiPanelOpen: true })
+      set({ aiPanelOpen: true, aiDockTab: 'ai' })
       return
     }
     // F24 — ô tìm lệnh cũng là overlay riêng, cùng lý do: nó mở ĐÈ lên mọi thứ rồi đóng ngay
@@ -237,16 +250,21 @@ export const useUiStore = create<UiState>((set) => ({
     // AI chẩn đoán cũng là DOCK: một phiên chạy nhiều bước, mỗi bước chờ user duyệt — có backdrop
     // thì suốt phiên không xem được gì khác, kể cả terminal của chính máy đang chẩn đoán.
     if (modal === 'ai-diagnose') {
-      set({ aiDiagnoseOpen: true, aiDiagnoseMin: false })
+      set({ aiDiagnoseOpen: true, aiDiagnoseMin: false, aiDockTab: 'ai-diagnose' })
       return
     }
     set({ modal })
   },
+  // Mở panel = đưa nó lên MẶT TRƯỚC của dock chung. Không kéo tab theo thì bấm "Trợ lý AI" lúc
+  // đang xem tab chẩn đoán sẽ như không có gì xảy ra — panel đã mở sẵn, chỉ nằm ở tab kia.
   aiPanelOpen: false,
-  setAiPanelOpen: (aiPanelOpen) => set({ aiPanelOpen }),
+  setAiPanelOpen: (aiPanelOpen) => set(aiPanelOpen ? { aiPanelOpen, aiDockTab: 'ai' } : { aiPanelOpen }),
   aiDockWidth: readAiDockWidth(),
   aiDiagnoseOpen: false,
-  setAiDiagnoseOpen: (aiDiagnoseOpen) => set({ aiDiagnoseOpen }),
+  setAiDiagnoseOpen: (aiDiagnoseOpen) =>
+    set(aiDiagnoseOpen ? { aiDiagnoseOpen, aiDockTab: 'ai-diagnose' } : { aiDiagnoseOpen }),
+  aiDockTab: 'ai',
+  setAiDockTab: (aiDockTab) => set({ aiDockTab }),
   setAiDockWidth: (px) => {
     const aiDockWidth = Math.round(Math.min(AI_DOCK_MAX, Math.max(AI_DOCK_MIN, px)))
     try {
