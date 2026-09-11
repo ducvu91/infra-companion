@@ -200,6 +200,65 @@ export { AiService } from './ai/AiService'
 export type { AiProvider, AiRuntimeConfig, AiAskRequest, AiAskResult, AiMode } from './ai/AiService'
 export { isReadOnlyCommand } from './ai/readonlyGuard'
 export type { ReadOnlyVerdict } from './ai/readonlyGuard'
+// Codex App Server — lõi JSON-RPC/JSONL để nhúng agent Codex (auth kế thừa từ `codex login`)
+export { splitJsonl } from './codex/jsonl'
+export type { JsonlSplit } from './codex/jsonl'
+export { isNotification, isResponse, isServerRequest, rpcErrorMessage } from './codex/protocol'
+export type {
+  CodexMessage,
+  CodexNotification,
+  CodexRequest,
+  CodexResponse,
+  CodexRpcError,
+  RpcId,
+  ServerRequest,
+} from './codex/protocol'
+export { DEFAULT_REQUEST_TIMEOUT_MS, RpcPeer } from './codex/RpcPeer'
+export type { RpcPeerDeps, ScheduleFn } from './codex/RpcPeer'
+export { DEFAULT_OPT_OUT, INITIALIZE_TIMEOUT_MS, buildInitializeParams, validateInitializeResult } from './codex/handshake'
+export type { InitializeInfo, InitializeOptions } from './codex/handshake'
+export { initialThreadState, reduceAll, reduceThreadEvent } from './codex/events'
+// `ThreadState` của codex xuất ra dưới tên `CodexThreadState`: `replication/status` đã có một
+// `ThreadState` nghĩa khác hẳn (trạng thái thread replication của MySQL).
+export type {
+  CodexItem,
+  ItemKind as CodexItemKind,
+  McpServerState as CodexMcpServer,
+  ThreadPhase as CodexThreadPhase,
+  ThreadState as CodexThreadState,
+} from './codex/events'
+export {
+  buildSpawnArgv,
+  classifyProbe,
+  codexCandidates,
+  isShimPath,
+  looksLikeAuthError,
+  pickNewestBinDir,
+  windowsBinRoot,
+} from './codex/discovery'
+export type { CodexCandidate, CodexReadiness, CodexSource, ProbeInput, ProtocolCaps } from './codex/discovery'
+export { codexEnv } from './codex/env'
+export type { CodexEnvOptions } from './codex/env'
+export {
+  CODEX_DEFAULT_PROFILE,
+  buildLoginParams,
+  isValidProfileName,
+  parseAccount,
+  parseLoginCompleted,
+  parseRateLimit,
+  rateLimitParts,
+} from './codex/account'
+export type { CodexAccount, CodexAuthMode, CodexLoginKind, CodexRateLimit } from './codex/account'
+export { CODEX_WORKSPACE_DIR, WORKSPACE_DRIVE_ORDER, workspaceCandidates } from './codex/cwd'
+export { classifyModelError, modelFromError, parseModelList, parseModelListFull, parseThreadList } from './codex/model'
+export type { CodexModel, CodexModelFull, CodexThreadSummary, ModelIssue } from './codex/model'
+export {
+  CODEX_INSTALL_SUBDIR,
+  CODEX_NPM_PACKAGE,
+  installedBinaryCandidates,
+  isNewerVersion,
+  npmInstallArgs,
+} from './codex/install'
 export { resolveSecret, detectSecretProvider } from './secrets/SecretsService'
 export type { SecretProvider } from './secrets/SecretsService'
 export { generateTotp, isValidTotpSecret, normalizeTotpSecret, applyTotpToken, TOTP_TOKEN } from './secrets/totp'

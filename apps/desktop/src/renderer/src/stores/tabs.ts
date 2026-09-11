@@ -78,7 +78,15 @@ export const TOOL_TAB_KINDS = [
    * Trợ lý AI — mặc định là cột DOCK cạnh terminal; nút ⛶ mở nó thành TAB khi câu trả lời dài
    * (một script nhiều dòng, một bảng so sánh) và cột 400px thành chỗ cuộn liên tục.
    */
-  'ai'
+  'ai',
+  /**
+   * Agent Codex — TAB ngay từ đầu, không phải cột dock.
+   *
+   * Khác Trợ lý AI ở chỗ nó **là** việc chính chứ không phải thứ hỗ trợ đọc terminal: output
+   * gồm diff của patch, danh sách file, khối lệnh kèm kết quả. Một diff trong cột 400px thì
+   * không đọc nổi, mà hộp duyệt lệnh lại là chỗ phải đọc HẾT trước khi bấm.
+   */
+  'codex'
 ] as const
 export type ToolTabKind = (typeof TOOL_TAB_KINDS)[number]
 

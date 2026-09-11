@@ -130,6 +130,19 @@ export const TOOLS: readonly ToolEntry[] = [
 
   // --- Ứng dụng ---
   { id: 'ai', menuKey: 'menu.ai', descKey: 'features.dAi', category: 'app', modal: 'ai', common: false },
+  /**
+   * MỘT mục duy nhất, mở ở **cột dock bên phải** (`modal:` vì `setModal` chuyển hướng sang cờ
+   * dock, cùng khuôn `'ai'`).
+   *
+   * Trước đó có hai mục (cột / tab) — user chỉ ra ngay là rối: menu bày hai lựa chọn cho cùng
+   * một công cụ, mà lúc mở lên thì chưa ai biết mình cần cột hay tab. Nay mặc định là cột như
+   * Trợ lý AI, và nút **⛶** trên header chuyển sang tab khi câu trả lời/diff dài — quyết định
+   * đó thuộc lúc ĐANG đọc, không phải lúc chọn trong menu.
+   *
+   * Tab vẫn tồn tại (`ToolTabKind` có `'codex'`, mở được từ palette và từ nút ⛶), chỉ không
+   * chiếm một dòng menu nữa.
+   */
+  { id: 'codex', menuKey: 'menu.codex', descKey: 'features.dCodex', category: 'app', modal: 'codex-dock', common: false },
   { id: 'plugins', menuKey: 'menu.plugins', descKey: 'features.dPlugins', category: 'app', modal: 'plugins', common: false },
   // `common: false` cho Cài đặt / Trợ giúp KHÔNG có nghĩa là ẩn chúng khỏi menu: hai mục này
   // được vẽ tay ở CUỐI menu (sau separator) theo lệ chung của mọi app. Đặt `true` ở đây là ra

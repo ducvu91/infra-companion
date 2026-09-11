@@ -379,6 +379,37 @@ const api: InfraApi = {
     getDiagnosis: (id) => ipcRenderer.invoke(IPC.AI_DIAGNOSE_GET, id),
     deleteDiagnosis: (id) => ipcRenderer.invoke(IPC.AI_DIAGNOSE_DELETE, id)
   },
+  codex: {
+    status: () => ipcRenderer.invoke(IPC.CODEX_STATUS),
+    probe: () => ipcRenderer.invoke(IPC.CODEX_PROBE),
+    pickBinary: () => ipcRenderer.invoke(IPC.CODEX_PICK_BINARY),
+    installCli: () => ipcRenderer.invoke(IPC.CODEX_INSTALL_CLI),
+    onInstallLine: (cb) => subscribe(IPC.CODEX_INSTALL_EVENT, cb),
+    pickCwd: () => ipcRenderer.invoke(IPC.CODEX_PICK_CWD),
+    defaultCwd: () => ipcRenderer.invoke(IPC.CODEX_DEFAULT_CWD),
+    models: (sessionId) => ipcRenderer.invoke(IPC.CODEX_MODELS, sessionId),
+    setModel: (sessionId, model, effort) => ipcRenderer.invoke(IPC.CODEX_SET_MODEL, sessionId, model, effort),
+    threads: (cwd) => ipcRenderer.invoke(IPC.CODEX_THREADS, cwd),
+    resume: (threadId, cwd) => ipcRenderer.invoke(IPC.CODEX_RESUME, threadId, cwd),
+    getSettings: () => ipcRenderer.invoke(IPC.CODEX_GET_SETTINGS),
+    setSettings: (input) => ipcRenderer.invoke(IPC.CODEX_SET_SETTINGS, input),
+    start: (cwd) => ipcRenderer.invoke(IPC.CODEX_SESSION_START, cwd),
+    stop: (id) => ipcRenderer.invoke(IPC.CODEX_SESSION_STOP, id),
+    snapshot: (id) => ipcRenderer.invoke(IPC.CODEX_SNAPSHOT, id),
+    // `send` là fire-and-forget: kết quả về qua onEvent, không có gì để await.
+    send: (id, text) => ipcRenderer.send(IPC.CODEX_TURN_SEND, id, text),
+    cancel: (id) => ipcRenderer.send(IPC.CODEX_TURN_CANCEL, id),
+    onEvent: (cb) => subscribe(IPC.CODEX_EVENT, cb),
+    // Tài khoản: đăng nhập / đổi tài khoản NGAY trong app (app-server có sẵn `account/*`)
+    loginStart: (kind) => ipcRenderer.invoke(IPC.CODEX_LOGIN_START, kind),
+    loginCancel: () => ipcRenderer.invoke(IPC.CODEX_LOGIN_CANCEL),
+    logout: () => ipcRenderer.invoke(IPC.CODEX_LOGOUT),
+    onLoginEvent: (cb) => subscribe(IPC.CODEX_LOGIN_EVENT, cb),
+    profiles: () => ipcRenderer.invoke(IPC.CODEX_PROFILES),
+    profileAdd: (name) => ipcRenderer.invoke(IPC.CODEX_PROFILE_ADD, name),
+    profileRemove: (name) => ipcRenderer.invoke(IPC.CODEX_PROFILE_REMOVE, name),
+    profileUse: (name) => ipcRenderer.invoke(IPC.CODEX_PROFILE_USE, name)
+  },
   sync: {
     status: () => ipcRenderer.invoke(IPC.SYNC_STATUS),
     pickFolder: () => ipcRenderer.invoke(IPC.SYNC_PICK_FOLDER),

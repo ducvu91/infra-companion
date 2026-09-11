@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { IPC } from '@infra/shared'
 import { registerUpdaterIpc } from './ipc/updater'
 import { registerAiIpc } from './ipc/ai'
+import { disposeCodexSessions, registerCodexIpc } from './ipc/codex'
 import { registerBulkIpc } from './ipc/bulk'
 import { registerDataIpc } from './ipc/data'
 import { registerCommandHistoryIpc } from './ipc/commandHistory'
@@ -282,6 +283,7 @@ registerDiagIpc()
 registerLogTailIpc()
 registerBulkIpc()
 registerAiIpc()
+registerCodexIpc()
 registerNetToolsIpc()
 registerSyncIpc()
 registerMarketplaceIpc()
@@ -380,6 +382,7 @@ app.on('before-quit', (event) => {
   disposeFonts()
   flushSecretClipboard()
   disposeLogTails()
+  disposeCodexSessions()
   disposeHttpChecks()
   disposeInventory()
   disposeJobs()

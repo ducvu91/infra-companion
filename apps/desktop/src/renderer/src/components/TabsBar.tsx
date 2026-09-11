@@ -35,7 +35,8 @@ const TOOL_TAB_META: Record<ToolTabKind, { label: string; icon: string }> = {
   runbooks: { label: 'Runbooks', icon: '📖' },
   jobs: { label: 'Scheduled', icon: '🗓️' },
   security: { label: 'Security', icon: '🛡️' },
-  'folder-sync': { label: 'Folder sync', icon: '🧲' }
+  'folder-sync': { label: 'Folder sync', icon: '🧲' },
+  codex: { label: 'Codex', icon: '🤖' }
 }
 
 function toolMeta(kind: AppTab['kind']): { label: string; icon: string } | undefined {

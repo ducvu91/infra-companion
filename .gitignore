@@ -16,3 +16,9 @@ CLAUDE.md
 
 # Cấu hình editor cá nhân (vd tắt warning vars của extension GitHub Actions) — không ép người clone
 .vscode/
+
+# Harness chụp ảnh UI dựng tạm mỗi phiên (bundle + CSS build + ảnh PNG + script probe).
+# Máy này không có rasterizer SVG nên cách duy nhất TỰ NHÌN thứ mình vừa vẽ là bundle bằng
+# esbuild rồi chụp bằng Electron `capturePage` — xem CLAUDE.md §7. Sản phẩm của việc đó là
+# file tạm, không phải mã nguồn.
+apps/desktop/shot/

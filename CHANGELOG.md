@@ -5,6 +5,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.3.0] — 2026-09-11
+
+### Added
+
+- **Codex works inside the app, paid for by your ChatGPT plan — no API key.** The app runs OpenAI's `codex app-server` as a child process and talks to it over JSON-RPC, the same interface the Codex CLI, the Codex desktop app and the VS Code extension all use. Sign-in is whatever `codex login` already put in `~/.codex/auth.json`: the app **never reads that file** and never passes `OPENAI_API_KEY` to the agent, so a key sitting in your environment cannot quietly start billing you per token. Pick a working folder, describe the job, and the agent reads and edits files and runs commands in that folder — its answers, the commands it runs and their output all stream into the panel as they happen. Opens as a column beside the terminal (the terminal narrows rather than being covered) with **⛶** to expand it into a full tab when a diff gets long.
+- **Sign in, switch accounts, and see what is left of your quota — all in the app.** No terminal needed: **Sign in with ChatGPT** opens the browser and the app waits for the callback, with a device-code route for machines where no browser opens. Once signed in the panel shows the account email, the plan, and how much of the quota is used with the days until it resets. **Switch account** signs in over the top rather than signing out first, so a failed sign-in does not leave you with no account at all.
+- **Several accounts side by side, through profiles.** Codex keeps exactly one account per config directory, so a second account means a second directory: profiles do that. The default profile shares `~/.codex` with the `codex` you run in a terminal — sign in once, both work. A separate profile gets its own sign-in, and as a side effect does not load the MCP servers from your system config either. Removing a profile deletes its stored credentials with it.
+- **Earlier sessions, resumable.** Codex writes every session's transcript under `~/.codex/sessions`, so the history is already there — the panel lists it (first message, when, which model, which folder) and reopening one continues that conversation with everything the agent already knows. The app deliberately keeps no second copy of its own: two sources of truth for one thing drift apart, and Codex's copy is the one that can actually be resumed.
+- **Pick the model and the reasoning depth from the chat box.** Both sit in the composer itself — a throwaway question can run `low` and a refactor `high`, which is a per-question choice, not something to bury in Settings. The list comes from the server rather than being hard-coded, because which models and which depths exist changes with the CLI version and with your plan.
+- **The app updates Codex itself.** Codex's own `codex update` refuses to run when the CLI came from the Codex desktop app (*"Could not detect the Codex installation method"*), and an outdated CLI is not a small inconvenience — its model list goes stale until **every** model fails. The **⬇ Update Codex** button fetches the current release into the app's own folder via npm, verifies it actually runs, and uses it in preference to whatever is on PATH — without touching the `codex` you use in a terminal. The button appears right where a model error is reported, and a session that is open is reopened on the new binary, because updating the file on disk does not change an already-running process.
+- **Errors say what to do, not just what happened.** Three failures that all look like raw JSON from the server now come with the fix: a model that needs a newer Codex, a model the server has retired, and a model that cannot be used with a ChatGPT plan at all. The original message stays underneath — folded away, not deleted.
+- **Working folder is filled in for you.** `D:\InfraCompanion-Codex` (or `C:\` when there is no D: drive), created when you press Start rather than when the panel opens, so the app leaves nothing on your machine before you use the feature. The folder you used last always wins over the default.
+
+### Changed
+
+- **The AI column takes tabs.** Codex joins the assistant and the troubleshooter in one column (**✨ Assistant · 🩺 Diagnose · 🤖 Codex**) instead of opening a third one. The panel you are not looking at stays alive, so a half-typed question and a running agent are both still there when you switch back.
+- **Enter sends.** In the Codex composer, `Enter` sends and `Shift+Enter` starts a new line, the way every chat box works — `Ctrl+Enter` still sends too. Pressing Enter while an IME is composing (typing Vietnamese with Telex, for instance) inserts the character instead of sending a half-finished sentence.
+- **The composer is one rounded box.** Input, model picker and send button share a single frame with a circular **↑** to send, rather than three stacked blocks and a wide button in the middle — in a 400px column the old label spent half a row on what the Enter key already does.
+
+---
+
 ## [0.2.26] — 2026-09-10
 
 ### Changed

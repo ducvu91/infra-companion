@@ -173,6 +173,62 @@ export const IPC = {
   AI_DIAGNOSE_GET: 'ai:diagnose:get',
   AI_DIAGNOSE_DELETE: 'ai:diagnose:delete',
 
+  // Codex agent — nhúng `codex app-server` (JSON-RPC/JSONL qua stdio).
+  // Xác thực kế thừa từ `codex login` của user; app KHÔNG đọc ~/.codex/auth.json và không có
+  // API key nào ở đây.
+  CODEX_STATUS: 'codex:status',
+  // Probe ĐẦY ĐỦ (có chạy một turn thật) — TỐN TOKEN của gói user, chỉ gọi khi user chủ động bấm.
+  CODEX_PROBE: 'codex:probe',
+  CODEX_PICK_BINARY: 'codex:pick-binary',
+  /**
+   * Tải/cập nhật Codex CLI vào thư mục app (qua npm).
+   *
+   * Cần vì `codex update` của chính CLI **không dùng được** với bản do Codex desktop app quản
+   * ("Could not detect the Codex installation method"), mà bản cũ thì làm mọi model lỗi.
+   */
+  CODEX_INSTALL_CLI: 'codex:install-cli',
+  /** main → renderer: từng dòng output của npm, để UI hiện tiến độ. */
+  CODEX_INSTALL_EVENT: 'codex:install-event',
+  CODEX_PICK_CWD: 'codex:pick-cwd',
+  /**
+   * Thư mục làm việc mặc định — thư mục vừa dùng, hoặc một thư mục code hay gặp mà TỒN TẠI THẬT.
+   * Kênh riêng chứ không nhồi vào settings: settings là thứ user ghi, còn cái này app suy ra.
+   */
+  CODEX_DEFAULT_CWD: 'codex:default-cwd',
+  /** Model dùng được + mức suy luận của từng cái (từ model/list). */
+  CODEX_MODELS: 'codex:models',
+  /** Đổi model/mức suy luận cho phiên đang mở. */
+  CODEX_SET_MODEL: 'codex:set-model',
+  /** Liệt kê phiên cũ (Codex tự lưu ở ~/.codex/sessions). */
+  CODEX_THREADS: 'codex:threads',
+  /** Mở lại một phiên cũ và chat tiếp. */
+  CODEX_RESUME: 'codex:resume',
+  CODEX_GET_SETTINGS: 'codex:get-settings',
+  CODEX_SET_SETTINGS: 'codex:set-settings',
+  CODEX_SESSION_START: 'codex:session:start',
+  CODEX_SESSION_STOP: 'codex:session:stop',
+  /** Snapshot để renderer dựng lại UI sau reload (phiên vẫn sống ở main). */
+  CODEX_SNAPSHOT: 'codex:snapshot',
+  // Ba kênh dưới là `ipcMain.on` (fire-and-forget) — không có gì để trả, kết quả về qua
+  // CODEX_EVENT. Khuôn TERM_WRITE / LOCALDEV_RUNTIME_CANCEL.
+  CODEX_TURN_SEND: 'codex:turn:send',
+  CODEX_TURN_CANCEL: 'codex:turn:cancel',
+  /** main → renderer, gộp 100ms (trừ `closed` phải đi ngay). */
+  CODEX_EVENT: 'codex:event',
+  // Tài khoản: đăng nhập / đổi tài khoản / đăng xuất NGAY TRONG APP.
+  // App-server có sẵn `account/*` qua JSON-RPC nên không phải bắt user mở terminal chạy
+  // `codex login` — và `account/read` KHÔNG tốn token (không gọi model).
+  CODEX_LOGIN_START: 'codex:login:start',
+  CODEX_LOGIN_CANCEL: 'codex:login:cancel',
+  CODEX_LOGOUT: 'codex:logout',
+  /** main → renderer: login xong (thành công/thất bại) hoặc tài khoản vừa đổi. */
+  CODEX_LOGIN_EVENT: 'codex:login-event',
+  // Profile = một CODEX_HOME riêng, để giữ NHIỀU tài khoản song song.
+  CODEX_PROFILES: 'codex:profiles',
+  CODEX_PROFILE_ADD: 'codex:profile:add',
+  CODEX_PROFILE_REMOVE: 'codex:profile:remove',
+  CODEX_PROFILE_USE: 'codex:profile:use',
+
   SYNC_STATUS: 'sync:status',
   SYNC_PICK_FOLDER: 'sync:pick-folder',
   SYNC_CONFIGURE: 'sync:configure',

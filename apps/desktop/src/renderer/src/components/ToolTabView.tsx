@@ -19,6 +19,7 @@ import { RunbooksModal } from './RunbooksModal'
 import { JobsModal } from './JobsModal'
 import { SecurityAuditModal } from './SecurityAuditModal'
 import { FolderSyncModal } from './FolderSyncModal'
+import { CodexPanel } from './CodexPanel'
 import { useT } from '../i18n'
 import type { I18nKey } from '../i18n/dict'
 import type { ToolTabKind } from '../stores/tabs'
@@ -51,7 +52,8 @@ const TOOLS: Partial<Record<ToolTabKind, { icon: string; titleKey: I18nKey; rend
   runbooks: { icon: '📖', titleKey: 'runbooks.title', render: () => <RunbooksModal embedded /> },
   jobs: { icon: '🗓️', titleKey: 'jobs.title', render: () => <JobsModal embedded /> },
   security: { icon: '🛡️', titleKey: 'sec.title', render: () => <SecurityAuditModal embedded /> },
-  'folder-sync': { icon: '🧲', titleKey: 'folderSync.title', render: () => <FolderSyncModal embedded /> }
+  'folder-sync': { icon: '🧲', titleKey: 'folderSync.title', render: () => <FolderSyncModal embedded /> },
+  codex: { icon: '🤖', titleKey: 'codex.title', render: () => <CodexPanel embedded /> }
 }
 
 export function ToolTabView({ kind, active }: { kind: ToolTabKind; active: boolean }) {

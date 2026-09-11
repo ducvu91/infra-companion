@@ -728,6 +728,32 @@ Needs AI configured (see §14). If not, the settings form opens.
 
 ---
 
+## 14D. Codex agent — `⋯` → 🤖 Codex
+
+**What it is**: OpenAI's coding agent running **inside the app**, paid for by your **ChatGPT plan — no API key**. It reads and edits files and runs commands in a folder you pick, streaming its answers, the commands it runs and their output into the panel.
+
+**How the authentication works** (worth understanding, because it is the point): the app starts `codex app-server` as a child process and talks JSON-RPC to it — the same interface the Codex CLI, the Codex desktop app and the VS Code extension all use. Sign-in is whatever `codex login` already stored. The app **never reads `~/.codex/auth.json`** and **never passes `OPENAI_API_KEY`** to the agent, so a key sitting in your environment cannot quietly switch you from plan to per-token billing.
+
+**Requires** the Codex CLI on this machine. If it is missing, or too old, press **⬇ Update Codex** — the app fetches the current release into its own folder via npm (needs Node.js/npm) and uses that in preference to whatever is on PATH, **without touching the `codex` you run in a terminal**. Codex's own `codex update` cannot do this when the CLI came from the Codex desktop app; it exits with *"Could not detect the Codex installation method"*.
+
+**Sign in / switch account — in the app**: **Sign in with ChatGPT** opens your browser and the app waits for the callback; **Use a device code** is there for machines where no browser opens. Once signed in the card shows the account, the plan, and how much of the quota is used with days until it resets. **Switch account** signs in over the top rather than signing out first, so a failed sign-in never leaves you with no account.
+
+**Several accounts**: Codex keeps exactly one account per config directory, so a second account means a second directory — that is what **profiles** are. The **default** profile shares `~/.codex` with the `codex` in your terminal (sign in once, both work) and loads the MCP servers from your config; a **separate** profile has its own sign-in and does not. Removing a profile deletes its stored sign-in with it.
+
+**Working folder**: filled in for you — `D:\InfraCompanion-Codex`, or `C:\…` when there is no D: drive — and created when you press **Start**, not when the panel opens. The folder you used last always wins. Press **Choose…** for anything else. The agent works only inside that folder, and changing it needs a new session.
+
+**Model and reasoning depth** sit in the chat box, not in Settings: a throwaway question can run `low` and a refactor `high`, which is a per-question choice. The list comes from the server — which models and which depths exist changes with the CLI version and with your plan.
+
+**Earlier sessions**: Codex writes every session's transcript under `~/.codex/sessions`, so **🕘 Earlier sessions** on the start screen lists them (first message, when, model, folder) and opening one continues that conversation with everything the agent already knows. The app keeps no copy of its own — two sources of truth for one thing drift apart, and Codex's is the one that can be resumed. One limitation to expect: the old messages are **not redrawn** in the panel, so the view starts empty even though the agent remembers; a line in the panel says so.
+
+**Typing**: `Enter` sends, `Shift+Enter` starts a new line (`Ctrl+Enter` still sends). Pressing Enter while an IME is composing inserts the character instead of sending half a sentence.
+
+**Where it opens**: a column beside the terminal, sharing the AI column with the assistant and the troubleshooter (**✨ Assistant · 🩺 Diagnose · 🤖 Codex**) so the terminal narrows rather than being covered. **⛶** expands it into a full tab, which is what you want once a diff gets long.
+
+⚠️ **Not built yet**: there is no approval UI, so anything the agent asks permission for is **declined** — it reports back and works around it rather than running unreviewed commands. There is also no bridge for running read-only commands on your SSH hosts from the agent; that is planned, not present.
+
+---
+
 ## 15. Import from ssh_config — `⋯` → Import
 
 Pick your `~/.ssh/config` → it creates hosts, **preserves multi-hop ProxyJump**, imports IdentityFile (dedupes keys), and warns if needed. The group is named `ssh_config (date)`.

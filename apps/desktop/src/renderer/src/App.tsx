@@ -27,6 +27,7 @@ import { JobsModal } from './components/JobsModal'
 import { SecurityAuditModal } from './components/SecurityAuditModal'
 import { FolderSyncModal } from './components/FolderSyncModal'
 import { useFolderSyncStore } from './stores/folderSync'
+import { subscribeCodexEvents } from './stores/codex'
 import { useJobsStore } from './stores/jobs'
 import { useInventoryStore } from './stores/inventory'
 import { useEventsStore } from './stores/events'
@@ -222,6 +223,9 @@ export default function App() {
     const offJobRun = window.infra.jobs.onRunEvent((e) => useJobsStore.getState().applyRunEvent(e))
     // Theo dõi thư mục: watcher chạy ở main nên file được đẩy cả khi tab so lệch đang đóng
     const offFolderSync = window.infra.folderSync.onEvent((e) => useFolderSyncStore.getState().applyEvent(e))
+    // Codex: phiên sống ở MAIN nên nó chạy tiếp khi tab Codex đóng hoặc renderer reload — đăng ký
+    // ở đây (không phải trong component) để không bỏ event trong lúc panel chưa mount.
+    const offCodex = subscribeCodexEvents()
     // Local dev: trạng thái service / tiến độ tải runtime / tiến độ thao tác site (main là nguồn sự thật)
     const offLdService = window.infra.localdev.onServiceEvent((s) =>
       useLocaldevStore.getState().applyServiceEvent(s)
@@ -239,6 +243,7 @@ export default function App() {
       offLdService()
       offLdRuntime()
       offLdSite()
+      offCodex()
       offPulled()
       offLocked()
       offExit()

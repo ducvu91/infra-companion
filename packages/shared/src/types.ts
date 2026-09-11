@@ -2573,6 +2573,74 @@ export interface InfraApi {
     /** F48 — xoá một phiên khỏi lịch sử. */
     deleteDiagnosis(id: string): Promise<void>
   }
+  /**
+   * Agent Codex — nhúng `codex app-server`.
+   *
+   * Xác thực bằng **gói ChatGPT** của user: Codex tự đọc `~/.codex/auth.json` do họ tạo bằng
+   * `codex login`. Không có API key nào đi qua đây, và app không đọc file đó.
+   */
+  codex: {
+    /** Trạng thái CLI (miễn phí: dò binary + handshake, KHÔNG gọi model). */
+    status(): Promise<import('./codex').CodexReadinessDto>
+    /** Kiểm tra đầy đủ — có thể TỐN TOKEN của gói, chỉ gọi khi user chủ động bấm. */
+    probe(): Promise<import('./codex').CodexReadinessDto>
+    /** Chọn file `codex` tay khi nó không nằm ở chỗ nào app dò được. Trả đường dẫn đã lưu. */
+    pickBinary(): Promise<string | null>
+    /**
+     * Tải/cập nhật Codex CLI vào thư mục app (qua npm) — máy cần có Node.js/npm.
+     *
+     * Cần vì `codex update` của chính CLI không dùng được với bản do Codex desktop app quản, mà
+     * bản cũ thì làm mọi model lỗi. Bản app cài được ưu tiên hơn PATH khi dò.
+     */
+    installCli(): Promise<import('./codex').CodexInstallResultDto>
+    /** Từng dòng output của npm trong lúc cài — để UI hiện tiến độ. */
+    onInstallLine(cb: (line: string) => void): () => void
+    pickCwd(): Promise<string | null>
+    /**
+     * Thư mục làm việc mặc định: thư mục vừa dùng, hoặc một thư mục code hay gặp **đã kiểm tồn
+     * tại**. Trả `''` khi không tìm được gì — lúc đó để trống và để user tự chọn.
+     */
+    defaultCwd(): Promise<string>
+    /** Model dùng được + mức suy luận. Không tốn token. Truyền sessionId để dùng lại tiến trình đang mở. */
+    models(sessionId?: string): Promise<readonly import('./codex').CodexModelDto[]>
+    /** Đổi model/mức suy luận cho phiên — áp từ lượt kế tiếp. */
+    setModel(sessionId: string, model?: string, effort?: string): Promise<void>
+    /** Phiên cũ (Codex tự lưu ở ~/.codex/sessions).  để lọc theo thư mục đang làm. */
+    threads(cwd?: string): Promise<readonly import('./codex').CodexThreadSummaryDto[]>
+    /** Mở lại phiên cũ và chat tiếp.  phải là cwd của chính phiên đó. */
+    resume(threadId: string, cwd: string): Promise<import('./codex').CodexStartResultDto>
+    getSettings(): Promise<import('./codex').CodexSettingsDto>
+    setSettings(input: import('./codex').CodexSettingsDto): Promise<import('./codex').CodexSettingsDto>
+    /** Mở phiên. `cwd` chốt một lần cho cả phiên — đổi thư mục = phiên mới. */
+    start(cwd: string): Promise<import('./codex').CodexStartResultDto>
+    stop(sessionId: string): Promise<void>
+    /**
+     * Lấy lại toàn bộ trạng thái sau khi renderer reload — phiên vẫn sống ở main.
+     * `null` = phiên đã hết (bị dọn vì quá TTL, hoặc tiến trình đã thoát).
+     */
+    snapshot(sessionId: string): Promise<import('./codex').CodexSnapshotDto | null>
+    /** Gửi một lượt. Fire-and-forget: kết quả về qua `onEvent`. */
+    send(sessionId: string, text: string): void
+    cancel(sessionId: string): void
+    onEvent(cb: (e: import('./codex').CodexEventDto) => void): () => void
+    /**
+     * Bắt đầu đăng nhập — app-server tự mở browser (`chatgpt`) hoặc trả mã thiết bị.
+     *
+     * Resolve NGAY sau khi luồng khởi động, KHÔNG đợi user bấm xong trong browser (họ có thể mất
+     * vài phút hoặc bỏ giữa chừng). Kết quả thật về qua `onLoginEvent`.
+     */
+    loginStart(kind: import('./codex').CodexLoginKindDto): Promise<import('./codex').CodexLoginStartResultDto>
+    loginCancel(): Promise<void>
+    /** Đăng xuất profile đang dùng — xoá credential trong CODEX_HOME của nó. */
+    logout(): Promise<{ ok: boolean; error?: string }>
+    onLoginEvent(cb: (e: import('./codex').CodexLoginEventDto) => void): () => void
+    /** Danh sách profile. Chỉ có tên; tài khoản của profile đang dùng lấy ở `status()`. */
+    profiles(): Promise<readonly import('./codex').CodexProfileDto[]>
+    profileAdd(name: string): Promise<{ ok: boolean; error?: string }>
+    /** Xoá profile VÀ thư mục credential của nó. Không xoá được `default`. */
+    profileRemove(name: string): Promise<{ ok: boolean; error?: string }>
+    profileUse(name: string): Promise<{ ok: boolean; error?: string }>
+  }
   sync: {
     status(): Promise<SyncStatusDto>
     /** Mở dialog chọn thư mục đồng bộ. null = huỷ. */

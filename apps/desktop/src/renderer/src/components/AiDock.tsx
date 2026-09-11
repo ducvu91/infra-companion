@@ -4,6 +4,7 @@ import { useT } from '../i18n'
 import { useUiStore, type AiDockTab } from '../stores/ui'
 import { AiModal } from './AiModal'
 import { AiDiagnoseModal } from './AiDiagnoseModal'
+import { CodexPanel } from './CodexPanel'
 
 /**
  * Ô chứa các nút của panel đang hiện (⛶ ⚙ ✕) trên thanh tab.
@@ -27,11 +28,14 @@ export function AiDockHost() {
   const setAiOpen = useUiStore((s) => s.setAiPanelOpen)
   const diagOpen = useUiStore((s) => s.aiDiagnoseOpen)
   const minimizeDiag = useUiStore((s) => s.minimizeAiDiagnose)
+  const codexOpen = useUiStore((s) => s.codexPanelOpen)
+  const setCodexOpen = useUiStore((s) => s.setCodexPanelOpen)
   const activeTab = useUiStore((s) => s.aiDockTab)
 
   const open: AiDockTab[] = []
   if (aiOpen) open.push('ai')
   if (diagOpen) open.push('ai-diagnose')
+  if (codexOpen) open.push('codex')
   if (open.length === 0) return null
 
   // Tab đang chọn có thể vừa bị đóng — rơi về cái còn lại thay vì hiện cột trống.
@@ -51,6 +55,14 @@ export function AiDockHost() {
           renderSpec={(spec) => <AiDockPane spec={spec} active={active === 'ai-diagnose'} />}
         />
       )}
+      {/* Codex ở dock: đóng cột KHÔNG dừng phiên (phiên sống ở main), nên `✕` chỉ cất cột đi —
+          cùng ý với AI chẩn đoán. Mở lại thấy nguyên trạng qua `attach()`. */}
+      {codexOpen && (
+        <CodexPanel
+          onClose={() => setCodexOpen(false)}
+          renderSpec={(spec) => <AiDockPane spec={spec} active={active === 'codex'} />}
+        />
+      )}
     </AiDockShell>
   )
 }
@@ -64,10 +76,16 @@ export function AiDockHost() {
  */
 const TAB_META: Record<
   AiDockTab,
-  { icon: string; shortKey: 'ai.tabShort' | 'ai.diagnose.tabShort'; titleKey: 'ai.title' | 'ai.diagnose.title' }
+  {
+    icon: string
+    shortKey: 'ai.tabShort' | 'ai.diagnose.tabShort' | 'codex.title'
+    titleKey: 'ai.title' | 'ai.diagnose.title' | 'codex.title'
+  }
 > = {
   ai: { icon: '✨', shortKey: 'ai.tabShort', titleKey: 'ai.title' },
   'ai-diagnose': { icon: '🩺', shortKey: 'ai.diagnose.tabShort', titleKey: 'ai.diagnose.title' },
+  // "Codex" đã là một từ ngắn — không cần nhãn rút gọn riêng.
+  codex: { icon: '🤖', shortKey: 'codex.title', titleKey: 'codex.title' },
 }
 
 /**

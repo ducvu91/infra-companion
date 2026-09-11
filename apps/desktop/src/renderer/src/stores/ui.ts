@@ -4,6 +4,14 @@ import { useNavMenuStore } from './navMenu'
 import { useToolUsageStore } from './toolUsage'
 
 export type AppModal =
+  /**
+   * Codex ở CỘT DOCK (khác entry `codex` trong catalog, cái đó mở dạng TAB).
+   *
+   * Không phải modal thật — `setModal` chuyển hướng nó sang cờ `codexPanelOpen`, cùng khuôn
+   * `'ai'` và `'ai-diagnose'`. Có mặt trong union này để mọi lối vào sẵn có (menu ⋯, palette,
+   * lưới công cụ) dùng được mà không cần đường riêng.
+   */
+  | 'codex-dock'
   | 'export-hosts'
   | 'do-import'
   | 'known-hosts'
@@ -99,7 +107,7 @@ const AI_DOCK_DEFAULT = 400
  * cũng đúng với thói quen: người ta hỏi AI *hoặc* đang chẩn đoán, hiếm khi đọc cả hai cùng lúc.
  * Panel không hiện vẫn `mounted` (chỉ ẩn bằng CSS) nên câu đang gõ và phiên chẩn đoán còn nguyên.
  */
-export type AiDockTab = 'ai' | 'ai-diagnose'
+export type AiDockTab = 'ai' | 'ai-diagnose' | 'codex'
 
 interface UiState {
   modal: AppModal
@@ -131,6 +139,14 @@ interface UiState {
    */
   aiPanelOpen: boolean
   setAiPanelOpen: (open: boolean) => void
+  /**
+   * Codex ở cột dock (tab thứ 3), bên cạnh chế độ TAB đã có.
+   *
+   * Tab vẫn là chế độ chính vì output có diff/danh sách file, nhưng dock giải quyết ca thật:
+   * theo dõi một lượt dài trong khi vẫn làm việc ở terminal.
+   */
+  codexPanelOpen: boolean
+  setCodexPanelOpen: (open: boolean) => void
   /** Bề rộng cột dock Trợ lý AI (kéo mép trái để đổi, nhớ qua localStorage). */
   aiDockWidth: number
   setAiDockWidth: (px: number) => void
@@ -241,6 +257,12 @@ export const useUiStore = create<UiState>((set) => ({
       set({ aiPanelOpen: true, aiDockTab: 'ai' })
       return
     }
+    // Codex ở cột dock — cùng lý do như 'ai': nó là panel ghim sống song song với terminal,
+    // không phải hộp thoại, nên không thể nằm trong `modal` (chỉ giữ MỘT giá trị).
+    if (modal === 'codex-dock') {
+      set({ codexPanelOpen: true, aiDockTab: 'codex' })
+      return
+    }
     // F24 — ô tìm lệnh cũng là overlay riêng, cùng lý do: nó mở ĐÈ lên mọi thứ rồi đóng ngay
     // sau khi chọn, không nên chiếm chỗ của một hộp thoại đang mở.
     if (modal === 'cmd-history') {
@@ -259,6 +281,9 @@ export const useUiStore = create<UiState>((set) => ({
   // đang xem tab chẩn đoán sẽ như không có gì xảy ra — panel đã mở sẵn, chỉ nằm ở tab kia.
   aiPanelOpen: false,
   setAiPanelOpen: (aiPanelOpen) => set(aiPanelOpen ? { aiPanelOpen, aiDockTab: 'ai' } : { aiPanelOpen }),
+  codexPanelOpen: false,
+  setCodexPanelOpen: (codexPanelOpen) =>
+    set(codexPanelOpen ? { codexPanelOpen, aiDockTab: 'codex' } : { codexPanelOpen }),
   aiDockWidth: readAiDockWidth(),
   aiDiagnoseOpen: false,
   setAiDiagnoseOpen: (aiDiagnoseOpen) =>
