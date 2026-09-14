@@ -4,6 +4,8 @@ import {
   HINT_FIRST_MS,
   HINT_RETRY_MS,
   hintDelayMs,
+  motionIdleDelayMs,
+  motionPackBytes,
   openedLine,
   pickHint,
   sampleErrorMessage,
@@ -19,11 +21,13 @@ import {
 } from '@infra/shared'
 import { createVrmStage, type VrmPart, type VrmStage } from '../lib/vrmStage'
 import { useDraggablePanel } from '../lib/useDraggablePanel'
+import { useVrmMotion, type VrmMotionApi } from '../lib/useVrmMotion'
 import {
   VrmChatBubble,
   VrmMiniPanel,
   VrmOutfitPanel,
   VrmRadialMenu,
+  VrmSettingsFrame,
   VrmSidePanel,
   VrmSpeechBubble,
   type RadialAction
@@ -87,8 +91,26 @@ type LoadState =
 export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
   const boxRef = useRef<HTMLDivElement | null>(null)
   const stageRef = useRef<VrmStage | null>(null)
+  /** Bản state của `stageRef` — xem chú thích ở chỗ gán. */
+  const [stageReady, setStageReady] = useState<VrmStage | null>(null)
   const [models, setModels] = useState<VrmModelDto[]>([])
   const [settings, setSettings] = useState<VrmSettingsDto | null>(null)
+  /**
+   * Thư viện chuyển động `.vrma` (CC0, tải theo yêu cầu).
+   *
+   * Gắn ở component CHA vì bốn chỗ kích hoạt nằm rải rác: chạm vào người và mở chat ở shell bên
+   * dưới, còn cảnh báo thì đến từ store sự kiện ở đây. Khai SAU `settings` — nó đọc `reactToEvents`.
+   */
+  const motion = useVrmMotion(stageReady, settings?.reactToEvents !== false)
+  /**
+   * Đọc `motion` từ ref trong effect nghe sự kiện.
+   *
+   * Effect đó cố ý chỉ phụ thuộc `reactToEvents` — thêm `motion` vào deps là nó gỡ rồi đăng ký
+   * lại listener mỗi lần state của hook đổi (đang tải, clip đang chạy), và mỗi lần gỡ là mất một
+   * nhịp sự kiện.
+   */
+  const motionRef = useRef(motion)
+  motionRef.current = motion
   const [load, setLoad] = useState<LoadState>({ kind: 'idle' })
   const [picking, setPicking] = useState(false)
   /** Tỉ lệ ngang/dọc thật của model, để khung ôm sát thân người thay vì đoán bề rộng. */
@@ -180,6 +202,9 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
           return
         }
         stageRef.current = stage
+        // State song song với ref: hook chuyển động cần BIẾT LÚC NÀO stage sẵn sàng, mà gán ref
+        // không kích hoạt render nên nó sẽ mãi thấy `null`
+        setStageReady(stage)
         setStageAspect(stage.aspect)
         setExpressions(stage.listExpressions())
         const loaded = stage.listParts()
@@ -210,6 +235,7 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
       ac.abort()
       stageRef.current?.dispose()
       stageRef.current = null
+      setStageReady(null)
     }
     // Cố ý chỉ phụ thuộc id model: đổi FPS/springBone thì đẩy vào sân khấu đang chạy
     // (hai setter dưới đây), KHÔNG nạp lại 44 MB.
@@ -326,6 +352,13 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
       // Biểu cảm = phản ứng tức thời; trạng thái = dáng người giữ suốt lúc hệ thống có vấn đề
       stageRef.current?.playExpression(expressionForEvent(ev.kind, ev.severity))
       stageRef.current?.setStatus(statusForEvent(ev.kind, ev.severity))
+      /**
+       * Clip toàn thân — kênh thứ tư, mạnh nhất, nên chỉ dùng cho hai đầu của thang: có chuyện
+       * (cúi xin lỗi) và hết chuyện (ăn mừng). Mức `info` không gọi clip: một thông báo bình
+       * thường mà nhân vật diễn cả đoạn 7 giây là làm phiền, không phải báo tin.
+       */
+      if (ev.kind === 'recover') motionRef.current?.play('recover')
+      else if (ev.severity !== 'info') motionRef.current?.play('alert')
 
       /**
        * Bong bóng thoại — kênh thứ ba, và là kênh duy nhất nói được **chuyện gì** vừa xảy ra.
@@ -452,6 +485,7 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
       boxRef={boxRef}
       stageAspect={stageAspect}
       stage={stageRef.current}
+      motion={motion}
       bubble={bubble}
       onSpeak={speak}
       savedPos={
@@ -509,6 +543,7 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
           <StartScreen
             onPick={() => void pick()}
             onDownloaded={() => void refreshAfterAdd()}
+            models={models}
             picking={picking}
             error={load.kind === 'error' ? load.message : null}
           />
@@ -581,6 +616,7 @@ function VrmStageShell({
   controls,
   stageAspect,
   stage,
+  motion,
   bubble,
   onSpeak,
   savedPos,
@@ -605,6 +641,8 @@ function VrmStageShell({
   /** Tỉ lệ ngang/dọc thật của model, `null` khi chưa dựng xong. */
   readonly stageAspect: number | null
   readonly stage: VrmStage | null
+  /** Thư viện chuyển động — shell dùng cho "chạm vào người" và "mở chat", menu 🎬 dùng phần còn lại. */
+  readonly motion: VrmMotionApi
   /** Thông báo đang hiện trên đầu nhân vật; `null` = không có. */
   readonly bubble: { id: number; text: string; severity: AppEventSeverity } | null
   readonly zoom: number
@@ -684,6 +722,51 @@ function VrmStageShell({
   /** Bong bóng chat AI trên đầu nhân vật. */
   const [chatOpen, setChatOpen] = useState(false)
   /**
+   * Clip "đang nói" khi mở khung chat.
+   *
+   * Một effect theo `chatOpen` thay vì gọi ở cả **ba** chỗ mở chat (nhấn giữ, menu tròn, thu về
+   * từ dock AI): ba lời gọi rải rác là ba chỗ để quên khi thêm lối vào thứ tư.
+   */
+  const motionPlay = motion.play
+  useEffect(() => {
+    if (chatOpen) motionPlay('chat')
+  }, [chatOpen, motionPlay])
+
+  /**
+   * Mở công cụ "ngồi đọc lâu" → nhân vật xem điện thoại cho hợp cảnh.
+   *
+   * Nghe cờ `modal` của store thay vì móc vào từng nút bấm: so sánh config và replication mở được
+   * từ sidebar, lưới công cụ, bảng lệnh và vòng công cụ của chính nhân vật — móc từng chỗ là bốn
+   * chỗ để quên.
+   */
+  const openModal = useUiStore((s) => s.modal)
+  useEffect(() => {
+    if (openModal === 'compare' || openModal === 'replication') motionPlay('inspect')
+  }, [openModal, motionPlay])
+  /** Đọc `motion` trong hẹn giờ mà không phải đặt lại lịch mỗi lần state của hook đổi. */
+  const motionRef2 = useRef(motion)
+  motionRef2.current = motion
+
+  /**
+   * Clip "đứng thư giãn" chạy THƯA (90–180 giây một lần), không phải nền liên tục.
+   *
+   * Lý do không cho lặp mãi: clip chạy thì stage tắt toàn bộ lớp tự sinh — mất nhìn theo chuột,
+   * kéo níu, tay đu theo quán tính. Để nó chiếm chỗ vĩnh viễn là đánh đổi cả phần tương tác lấy
+   * một vòng lặp 8 giây. Thỉnh thoảng chen vào thì được cả hai.
+   *
+   * Đọc cờ bận qua `ref` (xem `hintBusyRef`) nên không phải đặt lại hẹn giờ mỗi lần một cờ đổi.
+   */
+  useEffect(() => {
+    if (!chromeless) return
+    let timer = 0
+    const fire = (): void => {
+      if (!hintBusyRef.current) motionRef2.current?.play('idle')
+      timer = window.setTimeout(fire, motionIdleDelayMs(Math.random))
+    }
+    timer = window.setTimeout(fire, motionIdleDelayMs(Math.random))
+    return () => clearTimeout(timer)
+  }, [chromeless])
+  /**
    * Nối với nút "thu về nhân vật" trên dock AI: báo cho dock biết có nhân vật để về, và nhận yêu
    * cầu mở bong bóng từ đó. So với bộ đếm ĐÃ THẤY chứ không so với 0: store sống qua các lần
    * mount, mount lại mà thấy đếm > 0 rồi tự bật chat là sai.
@@ -701,7 +784,7 @@ function VrmStageShell({
     useVrmChatStore.getState().setMini(false)
   }, [openReq])
   /** Bảng hai bên đang mở: biểu cảm / trang phục / model; `null` = không mở. */
-  const [side, setSide] = useState<'expr' | 'parts' | 'models' | null>(null)
+  const [side, setSide] = useState<'expr' | 'parts' | 'models' | 'motion' | null>(null)
   const [showSettings, setShowSettings] = useState(false)
 
   /**
@@ -853,17 +936,26 @@ function VrmStageShell({
        * thì bảng nằm đúng giữa.
        */
       style={
-        pos
-          ? // Đã kéo tay: giữ đúng chỗ user đặt, CHỈ đẩy sang trái khi chỗ đó lọt vào vùng dock
-            { left: dockW > 0 ? Math.min(pos.x, window.innerWidth - dockW - width - 8) : pos.x, top: pos.y }
-          : chromeless
-            ? { right: CHROMELESS_RIGHT_GAP + dockW }
-            : { top: 56 }
+        /**
+         * Mở CÀI ĐẶT → nhân vật vào **chính giữa màn hình**, vì bảng cài đặt là khung lớn hai cột
+         * và nhân vật đứng ở khe giữa hai cột (user yêu cầu). Tắt cài đặt thì về đúng chỗ cũ —
+         * `left` tính từ tâm nên không đụng tới vị trí đã lưu.
+         */
+        showSettings && chromeless
+          ? { left: Math.round(window.innerWidth / 2 - width / 2), bottom: 12 }
+          : pos
+            ? // Đã kéo tay: giữ đúng chỗ user đặt, CHỈ đẩy sang trái khi chỗ đó lọt vào vùng dock
+              { left: dockW > 0 ? Math.min(pos.x, window.innerWidth - dockW - width - 8) : pos.x, top: pos.y }
+            : chromeless
+              ? { right: CHROMELESS_RIGHT_GAP + dockW }
+              : { top: 56 }
       }
-      className={`absolute z-40 flex flex-col ${pos ? '' : chromeless ? 'bottom-3' : 'right-3'} ${
+      className={`absolute z-40 flex flex-col ${
+        showSettings && chromeless ? '' : pos ? '' : chromeless ? 'bottom-3' : 'right-3'
+      } ${
         chromeless
-          ? // `left`/`right` đổi khi dock mở/đóng → trượt sang thay vì nhảy
-            'pointer-events-none transition-[left,right] duration-300'
+          ? // `left`/`right`/`bottom` đổi khi dock hoặc cài đặt mở/đóng → trượt sang thay vì nhảy
+            'pointer-events-none transition-[left,right,bottom,top] duration-300'
           : 'bg-elevated/95 border-edge-strong w-80 gap-2 overflow-hidden rounded-lg border p-3 opacity-95 shadow-2xl transition-opacity hover:opacity-100'
       }`}
     >
@@ -894,7 +986,13 @@ function VrmStageShell({
         className={`relative shrink-0 transition-opacity duration-200 ${
           chromeless ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'h-[380px] w-full overflow-hidden'
         } ${dockOpen ? 'pointer-events-none opacity-40' : ''}`}
-        title="Kéo để níu nhân vật · Ctrl+kéo để di chuyển · Shift+kéo để xoay · Ctrl+lăn để phóng to · chuột phải mở menu"
+        /**
+         * Tooltip NGẮN. Bản trước liệt kê cả 5 thao tác nên Windows vẽ ra một dải chữ chạy ngang
+         * gần hết màn hình, che mất chính nhân vật — mà tooltip thì tự hiện khi rê chuột, user
+         * không bấm gì cũng phải chịu. Danh sách đầy đủ đã có ở menu chuột phải và ở các câu gợi ý
+         * nhân vật tự nói, nên ở đây chỉ cần chỉ đường tới đó.
+         */
+        title="Chuột phải để mở menu"
         onContextMenu={(e) => {
           if (!chromeless) return
           // Chuột phải TRONG một bảng nổi là việc của bảng đó, không phải mở menu nhân vật
@@ -1052,6 +1150,8 @@ function VrmStageShell({
           // `poke` tự bốc kiểu phản ứng và biểu cảm hợp với kiểu đó
           if (stage.hitTest(nx, ny)) {
             stage.poke()
+            // Clip giật mình — chạy một lần rồi tự trả về chuyển động thường
+            motion.play('poke')
             markHintDone('poke')
           }
         }}
@@ -1101,6 +1201,7 @@ function VrmStageShell({
                 label: 'Công cụ',
                 onSelect: () => setToolRing({ x: menu.x, y: menu.y })
               },
+              { id: 'motion', icon: '🎬', label: 'Chuyển động', onSelect: () => setSide('motion') },
               { id: 'models', icon: '🧑‍🎤', label: 'Đổi nhân vật', onSelect: () => setSide('models') },
               { id: 'settings', icon: '⚙', label: 'Cài đặt', onSelect: () => setShowSettings(true) },
               {
@@ -1176,6 +1277,31 @@ function VrmStageShell({
             onClose={() => setSide(null)}
           />
         )}
+        {side === 'motion' &&
+          /**
+           * Chưa tải clip thì hộp nhỏ (chỉ một nút); tải rồi thì **hai cột hai bên nhân vật** như
+           * bảng biểu cảm — user yêu cầu rõ: đừng đè lên người.
+           */
+          (motion.installed.length === 0 ? (
+            <VrmMotionPanel motion={motion} anchor={anchorRect()} onClose={() => setSide(null)} onSpeak={onSpeak} />
+          ) : (
+            <VrmSidePanel
+              title="Chuyển động"
+              items={[
+                // Dừng đứng đầu để lúc đang chạy clip thì nó ở ngay tầm mắt
+                ...(motion.playing ? [{ id: '__stop', label: '■ Dừng' }] : []),
+                ...motion.clips.map((c) => ({
+                  id: c.id,
+                  label: `${c.label}${c.locomotion ? ' 🚶' : ''}`,
+                  active: motion.playing === c.id
+                }))
+              ]}
+              activeId={motion.playing}
+              onPick={(id) => (id === '__stop' ? motion.stop() : motion.playById(id))}
+              anchor={anchorRect()}
+              onClose={() => setSide(null)}
+            />
+          ))}
         {side === 'models' && (
           <VrmSidePanel
             title="Nhân vật"
@@ -1193,9 +1319,9 @@ function VrmStageShell({
         )}
 
         {chromeless && showSettings && controls && (
-          <VrmMiniPanel title="Nhân vật" anchor={anchorRect()} onClose={() => setShowSettings(false)}>
+          <VrmSettingsFrame anchor={anchorRect()} onClose={() => setShowSettings(false)}>
             {controls}
-          </VrmMiniPanel>
+          </VrmSettingsFrame>
         )}
       </div>
 
@@ -1352,6 +1478,38 @@ function VrmControls({
        * thì bảng cao quá và phần dưới lọt ra ngoài màn hình (user chụp được). Các công tắc hằng
        * ngày ở trên vẫn mở sẵn, còn hai mục này là việc làm vài lần rồi thôi.
        */}
+      {/**
+       * Bảng tra thao tác — thay cho tooltip dài.
+       *
+       * Mọi thao tác với nhân vật đều vô hình (nhấn giữ, Ctrl+kéo, Shift+kéo, Ctrl+lăn), nên phải
+       * có MỘT chỗ tra được. Trước đây nhét hết vào `title` của khung nhân vật: Windows vẽ ra một
+       * dải chữ chạy gần hết màn hình, tự hiện mỗi lần rê chuột và che mất chính nhân vật.
+       * Ở đây thì user chủ động mở khi cần, và nhân vật vẫn tự kể dần qua các câu gợi ý.
+       */}
+      <details className="group border-edge border-t pt-2">
+        <summary className="text-subtle hover:text-content flex cursor-pointer list-none items-center gap-1 text-xs">
+          <span className="group-open:hidden">▸</span>
+          <span className="hidden group-open:inline">▾</span>
+          Thao tác với nhân vật
+        </summary>
+        <div className="text-subtle mt-1.5 space-y-1 text-[11px]">
+          {[
+            ['Click', 'nhân vật phản ứng'],
+            ['Nhấn giữ', 'mở khung chat'],
+            ['Kéo', 'níu — thả ra bật về'],
+            ['Ctrl + kéo', 'di chuyển'],
+            ['Shift + kéo', 'xoay người'],
+            ['Ctrl + lăn', 'to / nhỏ'],
+            ['Chuột phải', 'mở menu']
+          ].map(([k, v]) => (
+            <div key={k} className="flex gap-2">
+              <span className="text-content w-20 shrink-0 font-medium">{k}</span>
+              <span className="min-w-0 flex-1">{v}</span>
+            </div>
+          ))}
+        </div>
+      </details>
+
       <details className="group border-edge border-t pt-2">
         <summary className="text-subtle hover:text-content flex cursor-pointer list-none items-center gap-1 text-xs">
           <span className="group-open:hidden">▸</span>
@@ -1362,7 +1520,7 @@ function VrmControls({
         <div className="mt-2 flex flex-col gap-2">
           {/* Tải model mẫu — cũng để Ở ĐÂY, không chỉ ở màn hình mời chọn: ai đã có sẵn một model
               thì không bao giờ thấy màn hình đó, nên sẽ không biết có model mẫu để tải. */}
-          <SampleDownload onDownloaded={onDownloaded} compact />
+          <SampleDownload onDownloaded={onDownloaded} models={models} compact />
 
           <div className="flex flex-wrap items-center gap-1">
             <button className="border-edge hover:bg-elevated rounded border px-2 py-1 text-xs" onClick={onPickAnimation}>
@@ -1420,10 +1578,13 @@ function VrmControls({
  */
 function SampleDownload({
   onDownloaded,
+  models,
   disabled,
   compact
 }: {
   readonly onDownloaded: () => void
+  /** Model đã có trong danh bạ — model mẫu nào đã tải rồi thì KHÔNG mời tải lại. */
+  readonly models: VrmModelDto[]
   readonly disabled?: boolean
   /** Bản gọn cho bảng cài đặt: bớt chữ, không có đường kẻ "hoặc". */
   readonly compact?: boolean
@@ -1435,10 +1596,22 @@ function SampleDownload({
   useEffect(() => {
     void window.infra.vrm.listSamples().then(setSamples)
   }, [])
+
+  /**
+   * Bỏ model mẫu đã tải khỏi danh sách mời.
+   *
+   * So theo **tên file**, không theo nhãn: nhãn là thứ đọc từ metadata trong file nên hai model
+   * khác nhau có thể trùng tên, còn `fileName` là do chính app đặt khi tải về (`vrm-samples/`).
+   * Kiểm bằng hậu tố đường dẫn để không phụ thuộc dấu gạch chéo của từng hệ điều hành.
+   */
+  const pending = samples.filter(
+    (s) => !models.some((m) => m.path.replace(/\\/g, '/').endsWith(`/${s.fileName}`))
+  )
   useEffect(() => window.infra.vrm.onSampleProgress(setProgress), [])
 
   const busy = progress?.phase === 'download' || progress?.phase === 'verify'
-  if (samples.length === 0) return null
+  // Tải hết rồi (hoặc chưa đọc được danh sách) → biến mất hẳn, không để lại khối rỗng
+  if (pending.length === 0) return null
 
   const download = async (id: string): Promise<void> => {
     setDlError(null)
@@ -1458,7 +1631,7 @@ function SampleDownload({
       {!compact && (
         <p className="text-subtle text-xs leading-relaxed">Chưa có model? Tải một nhân vật mẫu về dùng ngay.</p>
       )}
-      {samples.map((s) => (
+      {pending.map((s) => (
         <div key={s.id} className="border-edge bg-elevated/40 w-full rounded border p-2.5 text-left">
           <div className="text-content text-xs font-medium">{s.label}</div>
           {!compact && <div className="text-subtle mt-0.5 text-[11px] leading-relaxed">{s.note}</div>}
@@ -1506,12 +1679,15 @@ function SampleDownload({
 function StartScreen({
   onPick,
   onDownloaded,
+  models,
   picking,
   error
 }: {
   readonly onPick: () => void
   /** Tải xong model mẫu → cha nạp lại danh sách + cấu hình (giống sau khi `pick`). */
   readonly onDownloaded: () => void
+  /** Model đã có — để không mời tải lại model mẫu đã tải. */
+  readonly models: VrmModelDto[]
   readonly picking: boolean
   readonly error: string | null
 }) {
@@ -1519,7 +1695,7 @@ function StartScreen({
     <div className="flex flex-col items-center gap-3 px-4 py-6 text-center">
       <span className="text-4xl">🧑‍🎤</span>
 
-      <SampleDownload onDownloaded={onDownloaded} disabled={picking} />
+      <SampleDownload onDownloaded={onDownloaded} models={models} disabled={picking} />
 
       <div className="text-subtle flex w-full items-center gap-2 text-[10px]">
         <span className="border-edge flex-1 border-t" />
@@ -1600,4 +1776,93 @@ function pickError(reason: string, detail?: string): string {
     default:
       return `Không thêm được model${detail ? `: ${detail}` : ''}`
   }
+}
+
+/**
+ * Bảng 🎬 Chuyển động — chọn một clip `.vrma` cho nhân vật diễn.
+ *
+ * Clip **tải theo yêu cầu**, không nằm trong bản cài: 13 clip ~4 MB, phần lớn user không bao giờ
+ * mở bảng này. Chưa tải thì bảng chỉ có một nút tải cả bộ.
+ *
+ * Clip chọn tay **lặp mãi** cho tới khi bấm Dừng, khác hẳn clip tự chạy theo trạng thái (chạy một
+ * lần rồi trả quyền lại cho chuyển động tự sinh). Ở đây user đang chủ động xem, nên dừng là việc
+ * của họ.
+ */
+function VrmMotionPanel({
+  motion,
+  anchor,
+  onClose,
+  onSpeak
+}: {
+  readonly motion: VrmMotionApi
+  readonly anchor: { left: number; top: number; width: number; height: number }
+  readonly onClose: () => void
+  readonly onSpeak: (text: string) => void
+}) {
+  const mb = (motionPackBytes() / 1024 / 1024).toFixed(1)
+  const have = motion.installed.length > 0
+
+  return (
+    <VrmMiniPanel title="Chuyển động" anchor={anchor} onClose={onClose}>
+      {!have ? (
+        <div className="flex flex-col gap-2">
+          <p className="text-subtle text-[11px] leading-relaxed">
+            {motion.clips.length} chuyển động (CC0) — tải một lần rồi dùng mãi.
+          </p>
+          <button
+            className="border-edge hover:bg-elevated rounded border px-3 py-1.5 text-xs disabled:opacity-50"
+            disabled={motion.downloading}
+            onClick={() => {
+              void motion.download().then((ok) => {
+                if (ok) onSpeak('Onii~ em học được vài động tác mới rồi nè~ 🎬')
+              })
+            }}
+          >
+            {motion.downloading ? 'Đang tải…' : `⬇ Tải bộ chuyển động (${mb} MB)`}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1">
+          {motion.playing && (
+            <button
+              className="border-edge-strong bg-input hover:bg-hover mb-1 rounded border px-2 py-1 text-xs"
+              onClick={motion.stop}
+            >
+              ■ Dừng, về bình thường
+            </button>
+          )}
+          <div className="max-h-56 space-y-0.5 overflow-y-auto">
+            {motion.clips.map((c) => {
+              const ready = motion.installed.includes(c.id)
+              const on = motion.playing === c.id
+              return (
+                <button
+                  key={c.id}
+                  disabled={!ready}
+                  title={
+                    ready
+                      ? `${c.durationSec.toFixed(1)}s · ${c.author} · ${c.license}`
+                      : 'Chưa tải được clip này'
+                  }
+                  onClick={() => motion.playById(c.id)}
+                  className={`flex w-full items-center gap-1.5 rounded px-2 py-1 text-left text-[11px] disabled:opacity-40 ${
+                    on ? 'bg-accent/30 text-content' : 'text-subtle hover:bg-base/60 hover:text-content'
+                  }`}
+                >
+                  <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                  {/* Clip di chuyển: nhân vật rời khỏi chỗ đứng, nên báo trước chứ đừng để user
+                      bấm rồi mới thấy nhân vật trôi ra khỏi khung */}
+                  {c.locomotion && <span title="Nhân vật sẽ di chuyển khỏi chỗ đứng">🚶</span>}
+                  <span className="shrink-0 tabular-nums opacity-60">{c.durationSec.toFixed(0)}s</span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-subtle mt-1 text-[10px] leading-relaxed">
+            CC0 · へすい/rerofumi, sashii, JenJell
+          </p>
+        </div>
+      )}
+    </VrmMiniPanel>
+  )
 }

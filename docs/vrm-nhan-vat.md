@@ -463,6 +463,41 @@ tưởng là model hợp lệ.
 
 ---
 
+## 10.3 Thư viện chuyển động `.vrma`
+
+13 clip **CC0** tải theo yêu cầu vào `userData/vrm-motions/`. Danh mục ở
+`packages/shared/src/vrmMotion.ts`, nối vào nhân vật qua `lib/useVrmMotion.ts`.
+
+⚠️ **Bộ "VRMA_MotionPack" chính thức của pixiv KHÔNG được đưa vào repo.** Điều khoản của nó cấm
+*"distributing these motions or their alterations without permission in a way that can be rigged
+or extracted"* — đặt file vào repo hay release là đúng hành vi đó. User tự tải rồi dùng nút "Nạp
+file .vrma" thì hợp lệ, đó là chuyện giữa họ và pixiv.
+
+**Vai trò clip** (`VrmMotionRole`): `idle` · `chat` · `poke` · `alert` · `recover` · `inspect` ·
+`manual`. Vai trò `idle` có **nhiều clip luân phiên** — xoay vòng qua `nextMotionForRole`, không
+bốc ngẫu nhiên vì ngẫu nhiên sẽ ra cùng một clip hai ba lần liền.
+
+**Ba điều bắt buộc khi thêm clip mới:**
+
+1. **Đo `sha256` và `durationSec` từ chính file đã tải**, đừng chép từ mô tả. Nhiều clip không khai
+   `min`/`max` trong accessor nên phải đọc thẳng buffer mới ra thời lượng thật.
+2. **Đo bề ngang lúc clip chạy.** Khung hình chỉ rộng `WIDTH_MARGIN` (2,2×) so với tư thế đứng —
+   clip rộng hơn thế bị cắt tay. Đo được: xem điện thoại 0,92× · đứng thư giãn 1,32× · tạo dáng
+   1,92× · ăn mừng 2,16× · **máy bay 3,55×** (vì vậy máy bay chỉ ở nhóm `manual`).
+3. **Kiểm clip có dời nhân vật đi không.** Đo `hips` translation: `reaction-startle` dời **53 cm
+   ngang, 97 cm sau**. Clip tự chạy luôn bật `anchor: true` để ghim tại chỗ; chỉ clip
+   `locomotion` do user chọn tay mới được đi.
+
+**Chạy một lần rồi trả quyền** (`playAnimation(bytes, { once: true })`): stage tự gỡ mixer khi hết
+clip. Dùng đồng hồ chứ không nghe sự kiện `finished` — sự kiện đó chỉ dừng action, mixer vẫn treo
+và lớp tự sinh vẫn bị bỏ qua, nhân vật đứng chết ở frame cuối.
+
+⚠️ **Clip chạy = tắt toàn bộ lớp tự sinh** (nhìn theo chuột, kéo níu, tay đu quán tính). Chỉ chớp
+mắt và biểu cảm còn chạy vì chúng nằm ngoài khối đó. Vì vậy clip `idle` chạy **thưa** (90–180s một
+lần) chứ không lặp liên tục, và có trần 25s cho clip tự chạy.
+
+---
+
 ## 11. Danh sách lỗi đã sửa, để không lặp lại
 
 | Triệu chứng | Nguyên nhân thật |

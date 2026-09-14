@@ -13,6 +13,7 @@ import {
   sampleDownloadCap,
   VRM_MAX_BYTES,
   VRM_MAX_MODELS,
+  VRM_MOTIONS,
   VRM_SAMPLE_MODELS,
   VRM_ZOOM_MAX,
   VRM_ZOOM_MIN,
@@ -340,7 +341,94 @@ async function downloadSample(id: string): Promise<VrmSampleResult> {
   }
 }
 
+/**
+ * ==== Thư viện chuyển động `.vrma` ====
+ *
+ * Cùng khuôn với model mẫu: tải theo yêu cầu vào `userData/vrm-motions/`, kiểm sha256, ghi `.part`
+ * rồi mới đổi tên. Khác ở chỗ tải **cả bộ một lượt** — 13 clip ~4 MB, bắt user bấm từng cái là
+ * phiền hơn giá trị nhận lại.
+ */
+function motionsDir(): string {
+  return join(app.getPath('userData'), 'vrm-motions')
+}
+
+/** Clip nào đã có trên đĩa (và đúng dung lượng — file cụt coi như chưa có). */
+async function installedMotions(): Promise<string[]> {
+  const dir = motionsDir()
+  const out: string[] = []
+  for (const c of VRM_MOTIONS) {
+    try {
+      const st = await stat(join(dir, c.fileName))
+      if (st.size === c.sizeBytes) out.push(c.id)
+    } catch {
+      /* chưa có — bình thường */
+    }
+  }
+  return out
+}
+
+/** Tải một clip; trả `true` nếu sau lượt này file đã nằm đúng chỗ với sha256 khớp. */
+async function downloadOneMotion(c: (typeof VRM_MOTIONS)[number], signal: AbortSignal): Promise<boolean> {
+  const finalPath = join(motionsDir(), c.fileName)
+  const partPath = `${finalPath}.part`
+  try {
+    const res = await fetch(c.url, { signal, redirect: 'follow' })
+    if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
+    const hash = createHash('sha256')
+    const cap = sampleDownloadCap(c.sizeBytes)
+    let received = 0
+    const tap = async function* (src: AsyncIterable<Uint8Array>): AsyncGenerator<Uint8Array> {
+      for await (const chunk of src) {
+        received += chunk.byteLength
+        if (received > cap) throw new Error('nội dung lớn hơn dự kiến')
+        hash.update(chunk)
+        yield chunk
+      }
+    }
+    await pipeline(Readable.fromWeb(res.body as never), tap, createWriteStream(partPath), { signal })
+    if (hash.digest('hex') !== c.sha256) {
+      await rm(partPath, { force: true })
+      return false
+    }
+    await rm(finalPath, { force: true }).catch(() => {})
+    await rename(partPath, finalPath)
+    return true
+  } catch {
+    await rm(partPath, { force: true }).catch(() => {})
+    return false
+  }
+}
+
 export function registerVrmIpc(): () => void {
+  ipcMain.handle(IPC.VRM_MOTION_LIST, async () => ({
+    clips: VRM_MOTIONS,
+    installed: await installedMotions()
+  }))
+
+  ipcMain.handle(IPC.VRM_MOTION_DOWNLOAD, async () => {
+    await mkdir(motionsDir(), { recursive: true })
+    const have = new Set(await installedMotions())
+    const ac = new AbortController()
+    const failed: string[] = []
+    // Tuần tự, không song song: 13 request cùng lúc tới cùng một host là cách nhanh nhất bị chặn
+    for (const c of VRM_MOTIONS) {
+      if (have.has(c.id)) continue
+      if (!(await downloadOneMotion(c, ac.signal))) failed.push(c.id)
+    }
+    const installed = await installedMotions()
+    return { ok: failed.length === 0, installed, failed }
+  })
+
+  ipcMain.handle(IPC.VRM_MOTION_READ, async (_e, id: string) => {
+    const c = VRM_MOTIONS.find((x) => x.id === id)
+    if (!c) return { ok: false as const, reason: 'không có clip này' }
+    try {
+      return { ok: true as const, bytes: new Uint8Array(await readFile(join(motionsDir(), c.fileName))) }
+    } catch (e) {
+      return { ok: false as const, reason: (e as Error).message }
+    }
+  })
+
   ipcMain.handle(IPC.VRM_SAMPLE_LIST, () => VRM_SAMPLE_MODELS)
 
   ipcMain.handle(IPC.VRM_SAMPLE_DOWNLOAD, (_e, id: string): Promise<VrmSampleResult> => downloadSample(id))
@@ -561,6 +649,9 @@ export function registerVrmIpc(): () => void {
     ipcMain.removeHandler(IPC.VRM_SAVE_OUTFIT)
     ipcMain.removeHandler(IPC.VRM_REMOVE_OUTFIT)
     ipcMain.removeHandler(IPC.VRM_SET_WORN_OUTFIT)
+    ipcMain.removeHandler(IPC.VRM_MOTION_LIST)
+    ipcMain.removeHandler(IPC.VRM_MOTION_DOWNLOAD)
+    ipcMain.removeHandler(IPC.VRM_MOTION_READ)
     ipcMain.removeHandler(IPC.VRM_SAMPLE_LIST)
     ipcMain.removeHandler(IPC.VRM_SAMPLE_DOWNLOAD)
     ipcMain.removeAllListeners(IPC.VRM_SAMPLE_CANCEL)

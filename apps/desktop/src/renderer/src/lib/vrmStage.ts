@@ -87,7 +87,27 @@ export interface ArmDebugFlags {
  * cắt tay/tóc trong phần lớn thời gian, mà không để thừa khoảng trống lớn hai bên (khoảng
  * trống ấy vẫn nuốt chuột vì vùng nhận chuột là hình chữ nhật).
  */
-const WIDTH_MARGIN = 1.18
+/**
+ * Lề bề ngang cộng thêm sau khi đo ở tư thế NGHỈ.
+ *
+ * **2,2 chứ không 1,18**: 18% đủ cho tóc/váy vung theo nhịp idle, nhưng từ khi có clip `.vrma`
+ * thì nhân vật còn dang tay và giơ tay lên. Đo bề ngang thật (khoảng cách hai bàn tay) trên
+ * Sendagaya Shino, lấy tỉ lệ so với lúc đứng yên:
+ *
+ * | clip | cần lề |
+ * |---|---|
+ * | xem điện thoại | 0,92× |
+ * | đứng thư giãn  | 1,32× |
+ * | tạo dáng       | 1,92× |
+ * | ăn mừng        | 2,16× |
+ * | máy bay        | **3,55×** |
+ *
+ * Chọn 2,2 — đủ cho mọi clip tự chạy. Không chọn 3,55 vì khung rộng gấp 3,5 lần thân người thì
+ * lúc đứng yên (99% thời gian) nhân vật teo lại thành một hình bé tí giữa khung, và khung càng
+ * to càng nuốt nhiều vùng click của app phía dưới. Clip "máy bay" vì thế chuyển sang nhóm chọn
+ * tay — user bấm xem thì chấp nhận tay hơi chạm mép, còn clip tự chạy thì không được cắt.
+ */
+const WIDTH_MARGIN = 2.2
 
 export interface VrmStageOptions {
   /**
@@ -208,7 +228,17 @@ export interface VrmStage {
   listParts(): VrmPart[]
   setPartVisible(name: string, visible: boolean): void
   /** Nạp file animation `.vrma`; `null` để trở về chuyển động idle tự sinh. */
-  playAnimation(bytes: Uint8Array | null): Promise<void>
+  /**
+   * Chạy một file `.vrma`. `null` = tắt, về chuyển động tự sinh.
+   *
+   * `once` = chạy đúng một lượt rồi **tự trả quyền** cho lớp idle — dùng cho phản ứng (giật mình,
+   * ăn mừng). Không có `once` thì clip lặp mãi và nhân vật mất hết phản ứng, chỉ hợp khi user
+   * chủ động chọn một chuyển động để xem.
+   *
+   * `anchor` = **ghim nhân vật tại chỗ**. Bắt buộc cho clip tự chạy: nhiều clip dời cả người đi
+   * tới 39 cm ngang, mà khung hình ôm sát thân nên nhân vật đi thẳng ra ngoài rồi mới quay lại.
+   */
+  playAnimation(bytes: Uint8Array | null, opts?: { once?: boolean; anchor?: boolean }): Promise<void>
   /** Dừng vòng lặp render và giải phóng toàn bộ tài nguyên GPU. */
   dispose(): void
 }
@@ -505,6 +535,16 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
   /** `AnimationMixer` khi đang chạy file `.vrma`; `null` = dùng chuyển động idle tự sinh. */
   let mixer: import('three').AnimationMixer | null = null
   /**
+   * Mốc kết thúc clip chạy-một-lần (`playAnimation(bytes, { once: true })`); 0 = clip lặp mãi.
+   *
+   * Dùng đồng hồ chứ không nghe sự kiện `finished` của mixer: sự kiện đó chỉ báo action dừng,
+   * còn `mixer` vẫn treo ở đó và `tick` vẫn bỏ qua toàn bộ lớp tự sinh — nhân vật sẽ đứng chết
+   * ở frame cuối. Phải **gỡ hẳn** mixer mới trả được quyền cho lớp idle.
+   */
+  let clipEndsAt = 0
+  /** Giữ nhân vật tại chỗ trong lúc clip chạy — xem chú thích ở `tick`. */
+  let anchorHips = false
+  /**
    * ==== "Chuột có đang trên người không" — KHÔNG dùng raycast ====
    *
    * `Raycaster.intersectObject(scene, true)` quét **từng tam giác** của skinned mesh, và với model
@@ -632,6 +672,18 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
   const head = vrm.humanoid?.getNormalizedBoneNode('head')
   const chest = vrm.humanoid?.getNormalizedBoneNode('chest') ?? vrm.humanoid?.getNormalizedBoneNode('spine')
   const spine = vrm.humanoid?.getNormalizedBoneNode('spine')
+  /**
+   * Hai đốt còn lại của thân trên — **chỉ lớp KÉO dùng**.
+   *
+   * Cột sống trong VRM có tới 5 khớp điều khiển được (`hips → spine → chest → upperChest → neck`),
+   * nhưng lớp kéo trước đây chỉ ghi vào `spine` và `chest`. Hậu quả: đoạn từ cổ xuống eo uốn như
+   * MỘT khối cứng, người bị bẻ ở đúng hai chỗ thay vì cong đều — user nhìn ra ngay.
+   *
+   * `upperChest` là tuỳ chọn trong chuẩn VRM (nhiều model không có), `neck` thì hầu như luôn có.
+   * Thiếu cái nào thì phần của nó được dồn sang khớp lân cận, xem `writePose`.
+   */
+  const upperChest = vrm.humanoid?.getNormalizedBoneNode('upperChest')
+  const neck = vrm.humanoid?.getNormalizedBoneNode('neck')
   const hips = vrm.humanoid?.getNormalizedBoneNode('hips')
   /** Vị trí NGHỈ của xương hông — mọi chuyển động cộng lệch vào đây, không gán đè. */
   const hipsRest = hips ? hips.position.clone() : new THREE.Vector3()
@@ -680,6 +732,9 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
     legBend: 0,
     spine: { x: 0, y: 0, z: 0 },
     chest: { x: 0, y: 0, z: 0 },
+    /** Hai đốt trên của thân — chỉ lớp kéo ghi; idle để 0 nên không đụng gì tới tư thế đứng. */
+    upperChest: { x: 0, z: 0 },
+    neck: { x: 0, z: 0 },
     head: { x: 0, y: 0, z: 0 },
     /**
      * Vai: phần NÂNG thêm (dương = nhô lên) từ thở / dồn trọng tâm / vi chuyển động.
@@ -699,6 +754,8 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
     pose.legBend = 0
     pose.spine.x = pose.spine.y = pose.spine.z = 0
     pose.chest.x = pose.chest.y = pose.chest.z = 0
+    pose.upperChest.x = pose.upperChest.z = 0
+    pose.neck.x = pose.neck.z = 0
     pose.head.x = pose.head.y = pose.head.z = 0
     pose.shoulderL = pose.shoulderR = 0
   }
@@ -807,6 +864,9 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
     if (legs.rLower) legs.rLower.rotation.set(pose.legBend * legX, 0, 0)
     if (spine) spine.rotation.set(pose.spine.x, pose.spine.y, pose.spine.z)
     if (chest) chest.rotation.set(pose.chest.x, pose.chest.y, pose.chest.z)
+    // Hai đốt trên: chỉ lớp kéo ghi, đứng yên thì cả hai bằng 0 nên tư thế đứng không đổi chút nào
+    if (upperChest) upperChest.rotation.set(pose.upperChest.x, 0, pose.upperChest.z)
+    if (neck) neck.rotation.set(pose.neck.x, 0, pose.neck.z)
     if (head) head.rotation.set(pose.head.x, pose.head.y, pose.head.z)
     /**
      * Vai TRƯỚC tay: vai dời gốc của tay trên, IK phải đọc gốc đã dời.
@@ -871,6 +931,33 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
   const tug = newTug()
   /** Đích kéo hiện tại (tỉ lệ khung); `null` = đã thả tay, lò xo đang đưa về. */
   let tugTarget: { x: number; y: number } | null = null
+  /**
+   * Giá trị kéo **trễ dần theo từng đốt** — đây là thứ biến "cả người nghiêng cùng lúc" thành
+   * "sóng chạy từ hông lên đầu".
+   *
+   * Bản trước mọi khớp dùng chung một giá trị `tug`, chỉ khác biên độ, nên cả thân xoay **cùng
+   * pha**: đúng kỹ thuật mà nhìn vẫn như một khối gỗ bị bẻ. Người thật thì gốc đi trước, mỗi đốt
+   * phía trên bám theo chậm hơn một chút, và lúc buông tay cũng bật về theo thứ tự đó.
+   *
+   * Mỗi phần tử đuổi theo phần tử TRƯỚC nó (không phải đuổi theo `tug` gốc), nên độ trễ cộng dồn
+   * dần lên ngọn. Tốc độ bám giảm dần: hông gần như tức thì, đầu chậm nhất.
+   */
+  const CHAIN_SPEED = [26, 20, 16, 13, 10, 8] as const
+  /** Thứ tự: hông · spine · chest · upperChest · neck · head. */
+  const chain: { x: number; z: number }[] = CHAIN_SPEED.map(() => ({ x: 0, z: 0 }))
+
+  function stepChain(dt: number): void {
+    let prevX = tug.x
+    let prevZ = tug.z
+    for (let i = 0; i < chain.length; i++) {
+      const c = chain[i]!
+      const k = damp(CHAIN_SPEED[i]!, dt)
+      c.x += (prevX - c.x) * k
+      c.z += (prevZ - c.z) * k
+      prevX = c.x
+      prevZ = c.z
+    }
+  }
   /** Tốc độ góc thân (rad/s) và dt của frame này — `tick` đo, `applyArms` đọc. */
   let bodyOmega = 0
   let frameDt = 1 / 60
@@ -1110,7 +1197,18 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
      * hết vào một khớp là gãy gập tại đó. Hông vẫn KHÔNG xoay — chân phải bám sàn.
      */
     stepTug(tug, tugTarget, dt)
-    const tugMag = Math.hypot(tug.x, tug.z)
+    // Sóng trễ dần lên từng đốt — phải chạy MỖI frame, kể cả lúc đã buông tay, để chuỗi còn bật về
+    stepChain(dt)
+    const [cHips, cSpine, cChest, cUpper, cNeck, cHead] = chain as [
+      { x: number; z: number },
+      { x: number; z: number },
+      { x: number; z: number },
+      { x: number; z: number },
+      { x: number; z: number },
+      { x: number; z: number }
+    ]
+    // Xét cả chuỗi, không chỉ `tug`: buông tay thì `tug` về 0 trước, còn ngọn vẫn đang đuổi theo
+    const tugMag = Math.max(Math.hypot(tug.x, tug.z), Math.hypot(cHead.x, cHead.z))
     if (tugMag > 1e-4) {
       /**
        * Lực kéo chia cho **CẢ NGƯỜI**, không chỉ thân trên.
@@ -1123,15 +1221,15 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
        */
       if (owns('hips', 'idle')) {
         // Hông TRƯỢT ngang/trước theo hướng kéo — mét, không phải radian
-        pose.hips.x += tug.z * -0.055
+        pose.hips.x += cHips.z * -0.055
         /**
          * ⚠️ **KHÔNG hạ hông ở đây.** Hạ hông là dời gốc bộ xương xuống → **cả người tụt**, bàn
          * chân lún qua mép khung (user chụp được: chân xuyên thanh trạng thái). Trọng tâm phải
          * hạ **do gối gập**, và phần bù để bàn chân đứng yên tính ở `writePose` từ chính góc gối.
          */
         // Hông nghiêng nhẹ theo — nhưng ÍT hơn thân trên nhiều, và chỉ khi bị kéo
-        pose.hipsRot.x += tug.x * 0.18
-        pose.hipsRot.z += tug.z * 0.18
+        pose.hipsRot.x += cHips.x * 0.18
+        pose.hipsRot.z += cHips.z * 0.18
       }
       /**
        * Chân chống lại bằng **gối chùng**, KHÔNG nghiêng đùi.
@@ -1148,18 +1246,45 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
        * nhìn rõ là đang nhún. Mức 0,3 cũ chỉ cho 4,8°, đo được mà mắt không thấy (user: "không
        * thấy đầu gối nhún").
        */
-      pose.legBend += tugMag * 1.4
+      // Gối theo HÔNG, không theo ngọn: chân là phần dưới hông, nó không việc gì phải đợi đầu
+      pose.legBend += Math.hypot(cHips.x, cHips.z) * 1.4
 
+      /**
+       * Thân trên uốn qua **cả 5 khớp**, không chỉ 2.
+       *
+       * Cột sống VRM là `hips → spine → chest → upperChest → neck → head`. Bản trước chỉ ghi
+       * `spine` và `chest`, nên đoạn từ cổ xuống eo cong đúng hai chỗ rồi thẳng đơ — user tả là
+       * "cứng đờ". Chia nhỏ ra nhiều khớp thì cùng một tổng góc lại thành một đường cong mềm.
+       *
+       * **Tổng các hệ số giữ nguyên ~0,68** như trước (0,42 + 0,26), chỉ rải ra — nên độ ngả tổng
+       * thể không đổi, chỉ khác ở chỗ nó cong đều thay vì gãy khúc.
+       *
+       * Model thiếu `upperChest` (chuẩn VRM cho phép) thì phần của nó dồn vào `chest`, thiếu
+       * `neck` thì dồn vào `head` — không để mất góc, cũng không ghi vào xương không tồn tại.
+       */
       if (owns('spine', 'idle')) {
-        pose.spine.x += tug.x * 0.42
-        pose.spine.z += tug.z * 0.42
-        pose.chest.x += tug.x * 0.26
-        pose.chest.z += tug.z * 0.26
+        pose.spine.x += cSpine.x * 0.2
+        pose.spine.z += cSpine.z * 0.2
+        const chestShare = upperChest ? 0.16 : 0.28
+        pose.chest.x += cChest.x * chestShare
+        pose.chest.z += cChest.z * chestShare
+        if (upperChest) {
+          pose.upperChest.x += cUpper.x * 0.14
+          pose.upperChest.z += cUpper.z * 0.14
+        }
+        if (neck) {
+          pose.neck.x += cNeck.x * 0.11
+          pose.neck.z += cNeck.z * 0.11
+        }
       }
-      // Đầu đi sau thân một nhịp — khối nặng nhất nên trễ nhất
+      /**
+       * Đầu đi sau thân một nhịp — khối nặng nhất nên trễ nhất. Khi model KHÔNG có `neck` thì
+       * đầu gánh luôn phần cổ, nếu không đoạn trên cùng lại thành cứng đúng như lỗi vừa sửa.
+       */
       if (owns('head', 'idle')) {
-        pose.head.x += tug.x * 0.2
-        pose.head.z += tug.z * 0.2
+        const headShare = neck ? 0.07 : 0.18
+        pose.head.x += cHead.x * headShare
+        pose.head.z += cHead.z * headShare
       }
     }
 
@@ -1436,9 +1561,30 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
       bodyOmega += (d / dt - bodyOmega) * damp(18, dt)
     }
     rotPrev = rotY
+    // Clip chạy-một-lần đã hết → GỠ mixer, trả xương lại cho lớp tự sinh ngay frame này
+    if (mixer && clipEndsAt > 0 && now >= clipEndsAt) {
+      mixer.stopAllAction()
+      mixer = null
+      clipEndsAt = 0
+    }
     // Animation ngoài điều khiển xương → bỏ tư thế idle để hai nguồn không tranh nhau
     if (mixer) {
       mixer.update(dt)
+      /**
+       * **NEO HÔNG** khi clip yêu cầu (`anchorHips`).
+       *
+       * Nhiều clip `.vrma` dời cả nhân vật đi trong không gian — đo được: `reaction-startle` dời
+       * **39 cm ngang và 92 cm về sau**, `pose-motion` 36 cm. Trong một game thì đúng, nhưng ở đây
+       * nhân vật đứng trong khung hình hẹp ôm sát người, nên nó **đi thẳng ra khỏi khung** rồi vài
+       * giây sau mới quay lại — user tả đúng: "click phát nhân vật mất tiu".
+       *
+       * Ghi đè SAU `mixer.update` chứ không tắt kênh: tắt kênh phải mổ clip lúc nạp, còn ghi đè
+       * thì một dòng và giữ nguyên phần nhún theo trục đứng (clip ngồi xổm vẫn hạ xuống được).
+       */
+      if (anchorHips && hips) {
+        hips.position.x = hipsRest.x
+        hips.position.z = hipsRest.z
+      }
     } else {
       /**
        * Một lượt cộng dồn: xoá tư thế → từng tầng CỘNG vào → ghi xuống xương MỘT lần.
@@ -1670,10 +1816,12 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
       const p = parts.find((x) => x.name === name)
       if (p) p.object.visible = visible
     },
-    async playAnimation(bytes) {
+    async playAnimation(bytes, opts) {
       // Bỏ clip đang chạy trước, kể cả khi lượt mới lỗi — thà về idle còn hơn kẹt nửa vời
       mixer?.stopAllAction()
       mixer = null
+      clipEndsAt = 0
+      anchorHips = opts?.anchor === true
       if (!bytes) return
 
       const vrmaMod = await import('@pixiv/three-vrm-animation')
@@ -1688,7 +1836,20 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
         if (!anim) throw new Error('File không chứa animation VRM (.vrma)')
         const clip = vrmaMod.createVRMAnimationClip(anim as never, vrm)
         const m = new THREE.AnimationMixer(vrm.scene)
-        m.clipAction(clip).play()
+        const action = m.clipAction(clip)
+        /**
+         * **Chạy MỘT lần rồi tự về idle** khi `opts.once` — đây là thứ biến một clip thành "phản
+         * ứng" thay vì một vòng lặp bất tận.
+         *
+         * `clampWhenFinished` để tư thế không giật về frame 0 ở nhịp cuối; việc trả quyền cho lớp
+         * tự sinh do `clipEndsAt` trong `tick` lo, vì `mixer` phải bị gỡ hẳn chứ không chỉ dừng.
+         */
+        if (opts?.once) {
+          action.setLoop(THREE.LoopOnce, 1)
+          action.clampWhenFinished = true
+          clipEndsAt = performance.now() + clip.duration * 1000
+        }
+        action.play()
         mixer = m
       } finally {
         URL.revokeObjectURL(url)

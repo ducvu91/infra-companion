@@ -493,6 +493,13 @@ export const IPC = {
    * LIST: danh sách model mẫu · DOWNLOAD: tải + kiểm sha256 + thêm vào danh bạ ·
    * PROGRESS: main → renderer, tiến độ · CANCEL: huỷ lượt đang tải.
    */
+  /**
+   * Thư viện chuyển động `.vrma` (CC0) tải theo yêu cầu — cùng khuôn với model mẫu.
+   * LIST trả danh mục + clip nào đã có trên đĩa; DOWNLOAD tải cả bộ; READ đọc bytes cho renderer.
+   */
+  VRM_MOTION_LIST: 'vrm:motion-list',
+  VRM_MOTION_DOWNLOAD: 'vrm:motion-download',
+  VRM_MOTION_READ: 'vrm:motion-read',
   VRM_SAMPLE_LIST: 'vrm:sample-list',
   VRM_SAMPLE_DOWNLOAD: 'vrm:sample-download',
   VRM_SAMPLE_PROGRESS: 'vrm:sample-progress',

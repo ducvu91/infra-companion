@@ -5,6 +5,29 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.1] — 2026-09-14
+
+### Added
+
+- **The character acts out what is happening.** Thirteen CC0 motion clips — by へすい/rerofumi, sashii and JenJell — download on request from inside the app and drive the character's whole body: it stretches and drinks water while idle (two clips alternating, so it never settles into one mechanical loop), poses when you touch it, watches its phone while you read a config diff or a replication report, talks while the chat bubble is open, bows an apology when an alert fires and celebrates when everything goes green. The clips are **not in the installer** — 4 MB for a feature most people never turn on — and they are fetched from their authors' own CC0 releases rather than from the official VRoid motion pack, whose terms forbid redistributing motions in a form that can be extracted.
+- **A 🎬 Motion menu** in the radial menu, laid out as two columns either side of the character so it does not cover them. Pick a clip and it loops until you stop it; clips that walk the character out of its own frame are marked, and never play on their own.
+
+### Changed
+
+- **Settings open as a wide two-column panel** with the character standing in the gap between the columns, sliding to the middle of the screen while it is open and back to its corner when you close it. The old 256px box meant scrolling through a list that covered the character you were adjusting.
+- **The character's frame is wider**, because a clip that raises or spreads the arms needs roughly twice the width of a standing pose. Measured per clip: a phone-check needs 0.92× the resting width, a pose 1.92×, a cheer 2.16×.
+
+### Fixed
+
+- **Clicking the character no longer makes it disappear for a few seconds.** Most `.vrma` clips move the character through space as they play — the startle clip travels **53 cm sideways and 97 cm backwards** — which in a game is correct and here walked it straight out of a frame that hugs its body. Clips now play in place unless you deliberately pick a walk or a run.
+- **Clicking *Character* in the menu while the character is already on screen** now hides it, instead of doing nothing at all.
+- **The tooltip on the character is one short line.** It used to list all five gestures in a strip that ran most of the way across the screen, appeared whenever the pointer passed over, and covered the character itself. The full list moved into the settings panel, where you open it when you want it.
+- **The expression and outfit columns are narrower and shorter**, and they pull away from the character when there is room on either side rather than always overlapping it by a fixed amount.
+- **The settings panel no longer runs off the bottom of the screen** when the character is standing near it: the panel now opens upwards when there is more room above, caps its height and scrolls.
+- **Buttons inside the character's floating panels work.** Pressing one used to start a drag of the character and swallow the click, because the guard that recognises those panels ran on click but not on mouse-down — and the radial menu and model list were not marked as panels at all.
+
+---
+
 ## [0.4.0] — 2026-09-14
 
 ### Added

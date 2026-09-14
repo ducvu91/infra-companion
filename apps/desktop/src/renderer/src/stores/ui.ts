@@ -284,7 +284,15 @@ export const useUiStore = create<UiState>((set) => ({
     // F70 — nhân vật VRM là panel NỔI cạnh chỗ làm việc, cùng lý do như trên: nó phải ở đó
     // trong lúc user làm việc khác, nên không được chiếm ô `modal` duy nhất.
     if (modal === 'vrm') {
-      set({ vrmPanelOpen: true })
+      /**
+       * BẬT/TẮT, không phải luôn bật.
+       *
+       * Nhân vật là panel nổi **không có backdrop**, nên bấm "Nhân vật" lúc nó đang hiện mà chỉ
+       * `set(true)` thì không có gì xảy ra — user bấm rồi bấm lại, tưởng mục menu hỏng. Mọi lối
+       * vào (menu ⋯, palette, lưới công cụ, sidebar) đều đi qua đây nên sửa một chỗ là đủ.
+       * Cùng cách Ctrl+I làm với Trợ lý AI.
+       */
+      set((s) => ({ vrmPanelOpen: !s.vrmPanelOpen }))
       return
     }
     // AI chẩn đoán cũng là DOCK: một phiên chạy nhiều bước, mỗi bước chờ user duyệt — có backdrop

@@ -2607,6 +2607,12 @@ export interface InfraApi {
     downloadSample(id: string): Promise<import('./vrmSample').VrmSampleResult>
     cancelSample(): void
     onSampleProgress(cb: (p: import('./vrmSample').VrmSampleProgress) => void): () => void
+    /** Thư viện chuyển động: danh mục + clip nào đã tải về máy. */
+    listMotions(): Promise<{ clips: import('./vrmMotion').VrmMotionClip[]; installed: string[] }>
+    /** Tải cả bộ clip (bỏ qua clip đã có). Trả về số clip tải thành công. */
+    downloadMotions(): Promise<{ ok: boolean; installed: string[]; failed: string[] }>
+    /** Đọc bytes một clip đã tải — renderer không đọc đĩa được. */
+    readMotion(id: string): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: string }>
   }
   /**
    * Cửa sổ nhân vật NGOÀI desktop (app đang ở khay / thu nhỏ). Chỉ renderer route `#vrm-overlay`

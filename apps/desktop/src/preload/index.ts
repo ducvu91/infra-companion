@@ -388,7 +388,10 @@ const api: InfraApi = {
     listSamples: () => ipcRenderer.invoke(IPC.VRM_SAMPLE_LIST),
     downloadSample: (id) => ipcRenderer.invoke(IPC.VRM_SAMPLE_DOWNLOAD, id),
     cancelSample: () => ipcRenderer.send(IPC.VRM_SAMPLE_CANCEL),
-    onSampleProgress: (cb) => subscribe<VrmSampleProgress>(IPC.VRM_SAMPLE_PROGRESS, cb)
+    onSampleProgress: (cb) => subscribe<VrmSampleProgress>(IPC.VRM_SAMPLE_PROGRESS, cb),
+    listMotions: () => ipcRenderer.invoke(IPC.VRM_MOTION_LIST),
+    downloadMotions: () => ipcRenderer.invoke(IPC.VRM_MOTION_DOWNLOAD),
+    readMotion: (id) => ipcRenderer.invoke(IPC.VRM_MOTION_READ, id)
   },
   vrmOverlay: {
     ready: () => ipcRenderer.send(IPC.VRM_OVERLAY_READY),
