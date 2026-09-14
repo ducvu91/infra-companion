@@ -34,6 +34,15 @@ export function useDraggablePanel(opts?: {
    * dời khung phải có phím bổ trợ. Các panel khác giữ nguyên kéo trần — chúng có header thật.
    */
   requireCtrl?: boolean
+  /**
+   * Kẹp theo **TÂM** thẻ thay vì theo mép.
+   *
+   * Dành cho nhân vật VRM: thẻ rộng gấp `VRM_WIDTH_MARGIN` (2,2) lần người nhìn thấy — phần dư là
+   * lề trong suốt cho clip giang tay. Kẹp mép thì "đụng tường" khi người còn cách mép cả gang tay
+   * (user chụp được). Kẹp tâm: tâm thẻ cách mép ≥ 40px, tức phần giữa (nơi người đứng) luôn còn
+   * trên màn hình để nắm lại được, còn lề vô hình được phép tràn ra ngoài.
+   */
+  clampCenter?: boolean
 }): DraggablePanel {
   const panelRef = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{ x: number; y: number } | null>(opts?.initial ?? null)
@@ -71,8 +80,12 @@ export function useDraggablePanel(opts?: {
     if (!parent) return
     const pr = parent.getBoundingClientRect()
     const rect = panel.getBoundingClientRect()
-    // Kẹp trong khung app: không cho văng mất — header luôn còn với tới được
-    const x = Math.min(Math.max(e.clientX - pr.left - d.offX, 0), Math.max(0, pr.width - rect.width))
+    // Kẹp trong khung app: không cho văng mất — header luôn còn với tới được.
+    // `clampCenter` (nhân vật VRM): chỉ giữ TÂM thẻ trong khung, lề trong suốt được tràn.
+    const half = rect.width / 2
+    const x = opts?.clampCenter
+      ? Math.min(Math.max(e.clientX - pr.left - d.offX, 40 - half), pr.width - 40 - half)
+      : Math.min(Math.max(e.clientX - pr.left - d.offX, 0), Math.max(0, pr.width - rect.width))
     const y = Math.min(Math.max(e.clientY - pr.top - d.offY, 0), Math.max(0, pr.height - 40))
     lastPos.current = { x, y }
     setPos({ x, y })

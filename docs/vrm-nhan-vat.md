@@ -305,6 +305,27 @@ avatarSpin()                        // xoay một vòng ngay
 
 ---
 
+### 7.5 Bảng cài đặt lớn — hai quy tắc DOM
+
+`VrmSettingsFrame.tsx` là **anh em** của thẻ nhân vật trong `VrmPanel` (cùng cha `App`), không phải
+con. Thẻ nhân vật có `transform: scale()` (co cho vừa khe) và `opacity` (mờ dưới chữ); một phần tử
+`position: fixed` nằm trong cha có `transform` sẽ tính toạ độ **theo cha** và co theo cha — bảng văng
+khỏi tâm, to nhỏ theo thanh cỡ, mờ 55%, không dòng lỗi nào. Bảng chia **hai lớp** cùng một hộp: nền
+`z-30` dưới nhân vật (`z-40`), nội dung `z-50` trên nhân vật; `fixed` luôn tạo stacking context riêng
+nên một thẻ không làm được cả hai việc. Khe giữa lớp nội dung không nhận chuột để kéo / xoay vẫn chạy.
+
+Bề ngang thẻ nhân vật = bề ngang người đo được × `VRM_WIDTH_MARGIN` (2,2, ở `packages/shared`).
+Mọi phép "vừa khe", "chạm mép" phải chia cho số này: `characterSlotInSettings` chỉ co theo **chiều
+cao**; `useDraggablePanel({ clampCenter })` kẹp theo **tâm** thẻ. Với một model, `measureDrawn` bão
+hoà (bóng chạm hai mép khung đo vuông) nên tỉ lệ ra đúng 2,2 — thẻ rộng gấp 5 lần người: co theo khe
+thì chiều cao hiển thị = khe ÷ tỉ lệ, kéo thanh cỡ **không đổi gì**; kẹp theo mép thì "đụng tường"
+khi người còn cách mép cả gang tay. Vị trí `left/top` tính theo kích thước **gốc**, vì
+`transform-origin: bottom center` giữ đáy và tâm ngang của thẻ gốc, không phải của hình đã co.
+
+Kiểm bằng `apps/desktop/_harness/settings/run.cjs` (gitignore): bundle đúng component thật bằng
+esbuild, chụp 7 mức cỡ × 3 cỡ cửa sổ, đo bằng `getBoundingClientRect` / `elementFromPoint`. Hai lỗi
+22px / 62px chỉ lộ ở đây, không lộ ở test số.
+
 ## 8. Cách đo lại khi sửa
 
 Có sẵn bộ đo ở `apps/desktop/_harness/` (không commit). Cách dùng:
@@ -518,3 +539,9 @@ lần) chứ không lặp liên tục, và có trần 25s cho clip tự chạy.
 | Ctrl+R làm mất hết tab | Menu mặc định của Electron nuốt phím trước trang |
 | Đổi model báo lỗi `precision` | `forceContextLoss` giết vĩnh viễn canvas cũ |
 | Khung hình rộng gấp đôi | `Box3` đo theo bind pose (T-pose, tay giang) |
+| Bảng cài đặt văng khỏi tâm, co theo thanh cỡ, mờ theo nhân vật | Bảng là **con** của thẻ nhân vật có `transform: scale()` + `opacity` — `fixed` của con tính theo cha |
+| Kéo thanh cỡ mà người y nguyên | Co theo `khe ÷ bề ngang thẻ`, mà thẻ = H × tỉ lệ ⇒ chiều cao hiển thị = khe ÷ tỉ lệ, H triệt tiêu |
+| Kéo "đụng tường" khi người còn cách mép cả gang | Thẻ rộng gấp 2,2 lần người (`VRM_WIDTH_MARGIN`); hook kẹp theo mép thẻ |
+| Một model ra thẻ rộng bằng chiều cao | `measureDrawn` vẽ khung vuông nên bề ngang bão hoà ở `frameH` |
+| Nhân vật thò đáy 22px, lệch phải 62px trong khung | Tính `left/top` theo kích thước **đã co**; `transform-origin: bottom center` giữ đáy và tâm của thẻ **gốc** |
+| Đổi model làm mất bảng cài đặt | Trạng thái `loading` bị coi là "không có nhân vật" → effect dọn mọi lớp nổi |

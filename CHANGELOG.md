@@ -5,6 +5,23 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.2] — 2026-09-14
+
+### Fixed
+
+- **The character settings panel stays put.** It used to jump away from the centre of the screen, shrink and grow as you dragged the size slider, and turn as translucent as the character — because it was rendered *inside* the character's own element, which is scaled to fit the gap between the two columns and dimmed to sit under the text. A fixed-position child of a transformed element is positioned and scaled by that element, and no error is raised. The panel is now a sibling of the character, in two layers: a backdrop under the character and the text columns over it, so a character too large for the gap is overlaid by the text rather than pushed out of the frame. Verified by rendering the real component at three window sizes and seven zoom levels: the frame does not move by a pixel.
+- **The size slider works again inside settings, and the character can be dragged all the way to the edge of the screen.** Both came from one number: for some models the measured body width fills the whole measuring frame, so the character's element ends up 2.2× as wide as it is tall while the visible figure is a fraction of that. Shrinking the character to fit that element into the gap made its on-screen height a constant — 65% and 120% looked identical — and clamping the drag by the element's edge stopped it a hand's width short of the screen edge. The character now scales by height only, the drag keeps the *centre* of the element on screen, and a saturated measurement falls back to the columns that are actually dense with pixels (with a warning in the console).
+- **Switching models no longer closes the settings panel.** The loading state briefly counted as "no character", which tore down every floating panel. A small spinner now shows where the character stands while the new one loads.
+- **The character stands on the panel's floor, centred in the gap.** Earlier placement used the character's *scaled* size, but a CSS transform keeps the layout box's bottom edge and horizontal centre fixed — so it sat 22px too low and, for wide models, 62px too far right.
+
+### Changed
+
+- **Size is capped at 120% while settings are open.** The gap between the columns is about 350px wide; at 300% the character had to be shrunk to 0.37× to fit and the slider's number no longer described what was on screen. Closing settings restores the size you chose.
+- **The character dims to 55% under the settings text**, so the columns stay readable where they overlap it.
+- **Resizing the window while settings are open** re-centres the panel and the character.
+
+---
+
 ## [0.4.1] — 2026-09-14
 
 ### Added

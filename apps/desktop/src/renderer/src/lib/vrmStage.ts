@@ -36,6 +36,7 @@ import {
   stepArmSwing,
   stepTug,
   WEIGHT_SHIFT_ARM,
+  VRM_WIDTH_MARGIN,
   type ArmRestSide,
   isClaimedByHigher,
   isDoubleBlink,
@@ -107,7 +108,9 @@ export interface ArmDebugFlags {
  * to càng nuốt nhiều vùng click của app phía dưới. Clip "máy bay" vì thế chuyển sang nhóm chọn
  * tay — user bấm xem thì chấp nhận tay hơi chạm mép, còn clip tự chạy thì không được cắt.
  */
-const WIDTH_MARGIN = 2.2
+// Giá trị nằm ở shared: chỗ đặt nhân vật trong bảng cài đặt, hook kéo và test cần biết thẻ
+// rộng hơn người bao nhiêu — xem chú thích tại `VRM_WIDTH_MARGIN`
+const WIDTH_MARGIN = VRM_WIDTH_MARGIN
 
 export interface VrmStageOptions {
   /**
@@ -258,7 +261,12 @@ export async function createVrmStage(opts: VrmStageOptions, signal?: AbortSignal
   // Canvas MỚI cho mỗi lần dựng (xem `container` ở phần khai options): canvas đã bị
   // `forceContextLoss()` thì không bao giờ lấy lại được context nữa.
   const canvas = document.createElement('canvas')
-  canvas.className = 'absolute inset-0 size-full'
+  /**
+   * `z-40`: canvas phải nằm **TRÊN** khung cài đặt hai cột (`z-30`), vì nhân vật đứng ở khe giữa
+   * hai cột chứ không phải sau tấm kính. Không có `z-index` thì canvas `absolute` vẫn xếp dưới
+   * mọi anh em có `z-index` dương — nhân vật biến mất sau khung, user chụp được.
+   */
+  canvas.className = 'absolute inset-0 z-40 size-full'
   container.appendChild(canvas)
 
   const width = Math.max(1, container.clientWidth)
@@ -1922,6 +1930,8 @@ function measureDrawn(
     let maxX = -1
     let minY = S
     let maxY = -1
+    /** Số hàng có vẽ ở mỗi cột — dùng cho đường dự phòng khi phép đo bão hoà (dưới). */
+    const colRows = new Int32Array(S)
     for (let y = 0; y < S; y++) {
       for (let x = 0; x < S; x++) {
         // Ngưỡng 8 thay vì 0: viền khử răng cưa để lại alpha rất nhỏ quanh bóng nhân vật,
@@ -1931,6 +1941,7 @@ function measureDrawn(
           if (x > maxX) maxX = x
           if (y < minY) minY = y
           if (y > maxY) maxY = y
+          colRows[x]!++
         }
       }
     }
@@ -1938,6 +1949,37 @@ function measureDrawn(
     // Không vẽ được gì (model rỗng, đo hụt): giữ nguyên ước lượng cũ thay vì trả 0 làm khung
     // sập còn 0px — thà rộng thừa còn hơn biến mất
     if (maxX < 0 || maxY < 0) return { w: frameH * 0.6, h: frameH, cy: 0 }
+
+    /**
+     * Bóng chạm MÉP khung vuông = phép đo đã **bão hoà**: khung vuông chỉ rộng bằng chiều cao,
+     * nên `w` không thể vượt `frameH`. Người đứng nghỉ mà "rộng bằng chiều cao" là có thứ không
+     * phải thân người lọt vào (vật cầm tay, mesh hiệu ứng, tay chưa hạ). Đã gặp thật: một model
+     * ra đúng tỉ lệ 2,2 (= 1 × `WIDTH_MARGIN`) → thẻ rộng gấp 5 lần người; kéo thì "đụng tường"
+     * khi người còn cách mép cả gang tay, và trong bảng cài đặt bị co theo khe nên kéo thanh cỡ
+     * không đổi gì. Không lỗi nào báo — chỉ có con số này mới lộ.
+     *
+     * Khi đó lấy mép theo các **cột đặc** (có vẽ ≥ 8% chiều cao bóng): thân, tay buông, tóc, váy
+     * đều là dải dọc dài nên còn nguyên; tay giang ngang (dày ~7% chiều cao) hay thứ mảnh nằm
+     * ngang thì bị loại. Chỉ áp khi bão hoà — model đo bình thường không đổi một pixel.
+     */
+    if (minX <= 1 || maxX >= S - 2) {
+      const minRows = Math.max(2, Math.round((maxY - minY + 1) * 0.08))
+      let dMin = S
+      let dMax = -1
+      for (let x = 0; x < S; x++) {
+        if (colRows[x]! >= minRows) {
+          if (x < dMin) dMin = x
+          if (x > dMax) dMax = x
+        }
+      }
+      console.warn(
+        `[vrm] drawn-width measure saturated: x=[${minX},${maxX}] of ${S}; dense columns x=[${dMin},${dMax}]`
+      )
+      if (dMax >= dMin) {
+        minX = dMin
+        maxX = dMax
+      }
+    }
 
     // +1 vì cả hai mép đều là pixel có vẽ.
     // `cy` = tâm dọc của bóng nhân vật lệch bao nhiêu so với tâm khung hình, theo đơn vị

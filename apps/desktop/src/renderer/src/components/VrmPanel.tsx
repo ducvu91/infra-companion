@@ -4,13 +4,16 @@ import {
   HINT_FIRST_MS,
   HINT_RETRY_MS,
   hintDelayMs,
+  characterSlotInSettings,
   motionIdleDelayMs,
   motionPackBytes,
   openedLine,
+  settingsFrameBox,
   pickHint,
   sampleErrorMessage,
   statusForEvent,
   VRM_ZOOM_MAX,
+  VRM_ZOOM_MAX_IN_SETTINGS,
   VRM_ZOOM_MIN,
   zoomStep,
   type AppEventSeverity,
@@ -27,11 +30,11 @@ import {
   VrmMiniPanel,
   VrmOutfitPanel,
   VrmRadialMenu,
-  VrmSettingsFrame,
   VrmSidePanel,
   VrmSpeechBubble,
   type RadialAction
 } from './VrmRadialMenu'
+import { VrmSettingsFrame } from './VrmSettingsFrame'
 import { useEventsStore } from '../stores/events'
 import { useUiStore } from '../stores/ui'
 import { useToolUsageStore } from '../stores/toolUsage'
@@ -93,6 +96,14 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
   const stageRef = useRef<VrmStage | null>(null)
   /** Bản state của `stageRef` — xem chú thích ở chỗ gán. */
   const [stageReady, setStageReady] = useState<VrmStage | null>(null)
+  /**
+   * Đã từng dựng xong ít nhất một nhân vật trong phiên này.
+   *
+   * KHÁC `stageReady`: cái đó bị xoá lúc dọn stage cũ, nên trong lúc **đổi model** nó là `null` và
+   * panel sẽ rơi về chế độ có khung — kéo theo effect dọn lớp nổi đóng mất bảng cài đặt. Cờ này
+   * chỉ bật, không tắt, nên đổi model là chuyện xảy ra "tại chỗ".
+   */
+  const [everLoaded, setEverLoaded] = useState(false)
   const [models, setModels] = useState<VrmModelDto[]>([])
   const [settings, setSettings] = useState<VrmSettingsDto | null>(null)
   /**
@@ -205,6 +216,7 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
         // State song song với ref: hook chuyển động cần BIẾT LÚC NÀO stage sẵn sàng, mà gán ref
         // không kích hoạt render nên nó sẽ mãi thấy `null`
         setStageReady(stage)
+        setEverLoaded(true)
         setStageAspect(stage.aspect)
         setExpressions(stage.listExpressions())
         const loaded = stage.listParts()
@@ -537,7 +549,15 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
        * Bỏ khung CHỈ khi nhân vật đã thật sự hiện. Các trạng thái còn lại là CHỮ (chọn file,
        * đang nạp, lỗi, mất file) — chữ trên nền trong suốt đè lên Dashboard thì không đọc nổi.
        */
-      chromeless={!!active && !active.missing && load.kind === 'ready'}
+      /**
+       * ⚠️ `loading` VẪN tính là chromeless **khi đã từng có nhân vật**.
+       *
+       * Trước đây đổi model làm `load` về `loading` → `chromeless` false một nhịp → effect dọn lớp
+       * nổi **đóng luôn bảng cài đặt** (user chụp được: chọn model khác thì bảng biến mất). Nay chỉ
+       * lần nạp ĐẦU (chưa có `stageReady`) mới rơi về khung có nền; đổi model giữ nguyên bảng, chỉ
+       * hiện vòng xoay tại chỗ.
+       */
+      chromeless={!!active && !active.missing && (load.kind === 'ready' || (load.kind === 'loading' && everLoaded))}
       overlay={
         !active ? (
           <StartScreen
@@ -548,12 +568,27 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
             error={load.kind === 'error' ? load.message : null}
           />
         ) : load.kind === 'loading' ? (
-          <div className="text-subtle flex flex-col items-center justify-center gap-2 text-xs">
-            <span>Đang nạp model…</span>
-            <div className="bg-edge h-1 w-32 overflow-hidden rounded-full">
-              <div className="bg-accent h-full transition-all" style={{ width: `${Math.round(load.ratio * 100)}%` }} />
+          everLoaded ? (
+            /**
+             * ĐỔI model: vòng xoay nhỏ **tại chỗ**, không thanh tiến độ và không nền.
+             *
+             * Nhân vật cũ vừa bị dọn nên chỗ này trống; một thanh tiến độ rộng ở đây trông như
+             * app đang dựng lại từ đầu, mà thật ra chỉ là thay người. Vòng xoay nói đúng mức đó.
+             */
+            <div className="flex items-center justify-center">
+              <span
+                className="border-accent/70 size-8 animate-spin rounded-full border-2 border-t-transparent"
+                title="Đang nạp nhân vật mới…"
+              />
             </div>
-          </div>
+          ) : (
+            <div className="text-subtle flex flex-col items-center justify-center gap-2 text-xs">
+              <span>Đang nạp model…</span>
+              <div className="bg-edge h-1 w-32 overflow-hidden rounded-full">
+                <div className="bg-accent h-full transition-all" style={{ width: `${Math.round(load.ratio * 100)}%` }} />
+              </div>
+            </div>
+          )
         ) : load.kind === 'error' ? (
           <div className="text-danger p-3 text-center text-xs">{load.message}</div>
         ) : active.missing ? (
@@ -566,28 +601,36 @@ export function VrmPanel({ onClose }: { readonly onClose: () => void }) {
           </div>
         ) : null
       }
+      /**
+       * HÀM dựng cột, không phải phần tử dựng sẵn: khung cài đặt hai cột gọi nó **hai lần**
+       * (`'left'` · `'right'`) để đặt vào hai khe hai bên nhân vật. Chế độ có khung gọi một lần
+       * với `undefined` và nhận cả hai, xếp chồng như trước.
+       */
       controls={
-        settings && (
-          <div className="flex flex-col gap-2">
-            {active && <ModelInfo model={active} />}
-            <VrmControls
-              models={models}
-              active={active}
-              settings={settings}
-              animationName={animationName}
-              onPatch={(p) => void patch(p)}
-              onPick={() => void pick()}
-              onDownloaded={() => void refreshAfterAdd()}
-              onRemoveModel={(id) => void removeModel(id)}
-              onCloseCharacter={onClose}
-              onPickAnimation={() => void pickAnimation()}
-              onClearAnimation={() => {
-                void stageRef.current?.playAnimation(null)
-                setAnimationName(null)
-              }}
-            />
-          </div>
-        )
+        settings
+          ? (only) => (
+              <div className="flex flex-col gap-2">
+                {only !== 'right' && active && <ModelInfo model={active} open={only !== undefined} />}
+                <VrmControls
+                  models={models}
+                  active={active}
+                  settings={settings}
+                  animationName={animationName}
+                  only={only}
+                  onPatch={(p) => void patch(p)}
+                  onPick={() => void pick()}
+                  onDownloaded={() => void refreshAfterAdd()}
+                  onRemoveModel={(id) => void removeModel(id)}
+                  onCloseCharacter={onClose}
+                  onPickAnimation={() => void pickAnimation()}
+                  onClearAnimation={() => {
+                    void stageRef.current?.playAnimation(null)
+                    setAnimationName(null)
+                  }}
+                />
+              </div>
+            )
+          : null
       }
     />
   )
@@ -637,7 +680,8 @@ function VrmStageShell({
   readonly boxRef: React.RefObject<HTMLDivElement | null>
   readonly chromeless: boolean
   readonly overlay: React.ReactNode
-  readonly controls: React.ReactNode
+  /** Dựng nội dung cài đặt — gọi hai lần cho hai cột, hoặc một lần không tham số cho bản xếp chồng. */
+  readonly controls: ((only?: 'left' | 'right') => React.ReactNode) | null
   /** Tỉ lệ ngang/dọc thật của model, `null` khi chưa dựng xong. */
   readonly stageAspect: number | null
   readonly stage: VrmStage | null
@@ -683,7 +727,9 @@ function VrmStageShell({
     initial: initialPos,
     onCommit: (p) => onSavePos(p.x / window.innerWidth, p.y / window.innerHeight),
     // Kéo trần nay là "níu nhân vật" (thả ra bật về chỗ cũ), nên DỜI khung phải giữ Ctrl
-    requireCtrl: true
+    requireCtrl: true,
+    // Thẻ rộng gấp `VRM_WIDTH_MARGIN` lần người: kẹp theo tâm, không để lề vô hình "đụng tường"
+    clampCenter: true
   })
 
   /**
@@ -914,423 +960,478 @@ function VrmStageShell({
    * Khung phóng to theo `zoom`: phóng model mà giữ nguyên khung thì nhân vật tràn ra ngoài và
    * **bị cắt** bởi mép khung — vùng nhận chuột cũng lệch theo.
    */
-  const H = Math.round(440 * zoom)
+  /**
+   * Mở cài đặt thì **kẹp cỡ** về trần thấp, kể cả khi user đã đặt lớn từ trước.
+   *
+   * Chỉ chặn ở thanh trượt là chưa đủ: cỡ lưu trong settings có thể đã là 300% từ lần trước, mở
+   * cài đặt ra là nhân vật tràn sang hai cột. Kẹp ở đây thì mọi đường vào đều an toàn, và đóng
+   * cài đặt là về đúng cỡ user đã chọn — không ghi đè settings.
+   */
+  const effZoom = showSettings && chromeless ? Math.min(zoom, VRM_ZOOM_MAX_IN_SETTINGS) : zoom
+  const H = Math.round(440 * effZoom)
   const width = Math.round(H * (stageAspect ?? 0.6))
+  /**
+   * Khung cài đặt + chỗ đứng trong khe giữa — **một nguồn** cho cả hai: `settingsBox` truyền thẳng
+   * xuống `VrmSettingsFrame`, `settingsSlot` đặt nhân vật. Trước đây khung tự tính lại từ bề ngang
+   * ĐO ĐƯỢC của thẻ nhân vật (đã bị `scale` co lại) nên khe bên khung khác khe bên nhân vật.
+   */
+  const settingsBox = settingsFrameBox(window.innerWidth, window.innerHeight, width)
+  const settingsSlot = characterSlotInSettings(settingsBox, width, H)
+  // Hai thứ trên đọc cỡ màn hình lúc render: đổi cỡ cửa sổ khi bảng đang mở thì phải render lại,
+  // không thì khung đứng ở tâm cũ còn nhân vật đứng theo khe cũ
+  const [, bumpViewport] = useState(0)
+  useEffect(() => {
+    if (!showSettings) return
+    const onResize = (): void => bumpViewport((n) => n + 1)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [showSettings])
 
   return (
-    <div
-      ref={panelRef}
-      /**
-       * Chưa kéo lần nào → neo ở **góc dưới-phải**, đo từ hai mép đó chứ không phải left/top.
-       *
-       * Bề ngang khung đổi theo từng model (nó ôm sát người, `stageAspect` chỉ có sau khi đo
-       * xong), nên neo bằng `left` thì mỗi lần đổi nhân vật là khung trượt ngang một đoạn.
-       * Neo từ mép phải/dưới thì mép đó đứng yên, model rộng hẹp bao nhiêu cũng vậy.
-       *
-       * Chỉ neo đáy ở chế độ không khung: hộp có khung là bảng cài đặt, cao theo nội dung và
-       * dính đáy thì che mất thanh trạng thái.
-       *
-       * Lề phải `CHROMELESS_RIGHT_GAP` chứ không sát mép: bảng nổi trên đầu nhân vật (chat rộng
-       * 320px, cài đặt 256px) căn giữa theo thân người, mà thân chỉ ~150px — đứng sát mép thì
-       * nửa bảng bị đẩy ngược vào trong và lệch hẳn khỏi nhân vật. Chừa sẵn nửa hiệu bề rộng
-       * thì bảng nằm đúng giữa.
-       */
-      style={
-        /**
-         * Mở CÀI ĐẶT → nhân vật vào **chính giữa màn hình**, vì bảng cài đặt là khung lớn hai cột
-         * và nhân vật đứng ở khe giữa hai cột (user yêu cầu). Tắt cài đặt thì về đúng chỗ cũ —
-         * `left` tính từ tâm nên không đụng tới vị trí đã lưu.
-         */
-        showSettings && chromeless
-          ? { left: Math.round(window.innerWidth / 2 - width / 2), bottom: 12 }
-          : pos
-            ? // Đã kéo tay: giữ đúng chỗ user đặt, CHỈ đẩy sang trái khi chỗ đó lọt vào vùng dock
-              { left: dockW > 0 ? Math.min(pos.x, window.innerWidth - dockW - width - 8) : pos.x, top: pos.y }
-            : chromeless
-              ? { right: CHROMELESS_RIGHT_GAP + dockW }
-              : { top: 56 }
-      }
-      className={`absolute z-40 flex flex-col ${
-        showSettings && chromeless ? '' : pos ? '' : chromeless ? 'bottom-3' : 'right-3'
-      } ${
-        chromeless
-          ? // `left`/`right`/`bottom` đổi khi dock hoặc cài đặt mở/đóng → trượt sang thay vì nhảy
-            'pointer-events-none transition-[left,right,bottom,top] duration-300'
-          : 'bg-elevated/95 border-edge-strong w-80 gap-2 overflow-hidden rounded-lg border p-3 opacity-95 shadow-2xl transition-opacity hover:opacity-100'
-      }`}
-    >
-      {/* Canvas phải có kích thước THẬT từ CSS: WebGLRenderer đọc clientWidth/Height lúc dựng,
-          canvas cao 0 thì scene trống mà không báo lỗi gì. Kéo bằng chính thân nhân vật —
-          không khung thì không còn header để nắm; chuột phải mở menu. */}
-      {/**
-       * Khi CỘT DOCK AI mở (⛶ từ bong bóng chat, hoặc mở Trợ lý AI/Chẩn đoán/Codex): nhân vật
-       * mờ đi và **không nhận chuột nữa**. Đóng dock là bấm/kéo lại bình thường.
-       *
-       * Bong bóng chat NHỎ thì KHÔNG tắt: nó chỉ chiếm một dải trên đầu, người vẫn phải bấm/kéo
-       * được — user đã yêu cầu rõ. Bản đầu tắt cả lúc chat nhỏ và bị bắt sửa lại.
-       *
-       * Tắt chuột lúc dock mở còn chặn một lỗi thật: model đang bị đẩy sang trái né dock, chỉ
-       * cần một cú click xê dịch 1px là hook kéo-thả **ghi lại vị trí đã đẩy** thành vị trí user
-       * chọn — đóng dock xong nhân vật ở lại đó, "không về chỗ cũ". Không nhận chuột thì không
-       * có gì để ghi.
-       *
-       * `pointer-events-none` chứ không `opacity-0`: ẩn bằng opacity KHÔNG tắt vùng nhận chuột
-       * — đã dính đúng bẫy đó với hai nút ✕/⚙ trước đây.
-       *
-       * ⚠️ Chỉ đổi CLASS trên chính div này, tuyệt đối không bọc thêm/bỏ bớt thẻ: `boxRef` là
-       * nơi canvas WebGL cắm vào, đổi cấu trúc DOM là mất context và phải nạp lại model 40 MB.
-       */}
+    <>
       <div
-        ref={boxRef}
-        style={chromeless ? { height: H, width } : undefined}
-        className={`relative shrink-0 transition-opacity duration-200 ${
-          chromeless ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'h-[380px] w-full overflow-hidden'
-        } ${dockOpen ? 'pointer-events-none opacity-40' : ''}`}
+        ref={panelRef}
         /**
-         * Tooltip NGẮN. Bản trước liệt kê cả 5 thao tác nên Windows vẽ ra một dải chữ chạy ngang
-         * gần hết màn hình, che mất chính nhân vật — mà tooltip thì tự hiện khi rê chuột, user
-         * không bấm gì cũng phải chịu. Danh sách đầy đủ đã có ở menu chuột phải và ở các câu gợi ý
-         * nhân vật tự nói, nên ở đây chỉ cần chỉ đường tới đó.
+         * Chưa kéo lần nào → neo ở **góc dưới-phải**, đo từ hai mép đó chứ không phải left/top.
+         *
+         * Bề ngang khung đổi theo từng model (nó ôm sát người, `stageAspect` chỉ có sau khi đo
+         * xong), nên neo bằng `left` thì mỗi lần đổi nhân vật là khung trượt ngang một đoạn.
+         * Neo từ mép phải/dưới thì mép đó đứng yên, model rộng hẹp bao nhiêu cũng vậy.
+         *
+         * Chỉ neo đáy ở chế độ không khung: hộp có khung là bảng cài đặt, cao theo nội dung và
+         * dính đáy thì che mất thanh trạng thái.
+         *
+         * Lề phải `CHROMELESS_RIGHT_GAP` chứ không sát mép: bảng nổi trên đầu nhân vật (chat rộng
+         * 320px, cài đặt 256px) căn giữa theo thân người, mà thân chỉ ~150px — đứng sát mép thì
+         * nửa bảng bị đẩy ngược vào trong và lệch hẳn khỏi nhân vật. Chừa sẵn nửa hiệu bề rộng
+         * thì bảng nằm đúng giữa.
          */
-        title="Chuột phải để mở menu"
-        onContextMenu={(e) => {
-          if (!chromeless) return
-          // Chuột phải TRONG một bảng nổi là việc của bảng đó, không phải mở menu nhân vật
-          if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
-          // Chặn menu ngữ cảnh mặc định của Chromium, nếu không nó đè lên menu của mình
-          e.preventDefault()
-          // Toạ độ MÀN HÌNH: vòng tròn vẽ ở lớp phủ toàn cửa sổ, không trong khung hẹp
-          setMenu({ x: e.clientX, y: e.clientY })
-          markHintDone('menu')
-        }}
-        onWheel={(e) => {
-          // CHỈ khi giữ Ctrl: lăn trần phải để nguyên cho trang phía sau cuộn
-          if (!e.ctrlKey) return
-          // Lăn trong bảng nổi là để CUỘN BẢNG (bảng cài đặt có vùng cuộn), không phóng nhân vật
-          if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
-          e.preventDefault()
-          onZoom(e.deltaY)
-          markHintDone('zoom')
-        }}
-        onPointerMove={(e) => {
-          // Nhích quá 6px là user đang KÉO chứ không phải nhấn giữ → huỷ hẹn mở chat
-          const h = holdStart.current
-          if (h && (Math.abs(e.clientX - h.x) > 6 || Math.abs(e.clientY - h.y) > 6)) {
-            cancelHold()
-            // Nhích quá ngưỡng từ một cú bấm trên người (không Shift) = đang KÉO dời nhân vật
-            if (!e.shiftKey) markHintDone('move')
-          }
-
-          // Vị trí con trỏ do listener toàn cửa sổ lo (xem effect `pointermove` ở trên) —
-          // ở đây chỉ còn việc kéo xoay
-          const r = e.currentTarget.getBoundingClientRect()
-          if (rotating.current !== null) {
-            // Kéo ngang cả bề rộng khung = xoay đúng một vòng
-            onRotateBy(((e.clientX - rotating.current) / r.width) * Math.PI * 2, false)
-            rotating.current = e.clientX
-            return
-          }
+        style={
           /**
-           * Kéo TRẦN = níu nhân vật (không dời khung). Gửi độ lệch theo TỈ LỆ khung nên kéo trên
-           * khung nhỏ hay to đều ra cùng độ ngả — stage không biết gì về pixel.
+           * Mở CÀI ĐẶT → nhân vật vào **chính giữa màn hình**, vì bảng cài đặt là khung lớn hai cột
+           * và nhân vật đứng ở khe giữa hai cột (user yêu cầu). Tắt cài đặt thì về đúng chỗ cũ —
+           * `left` tính từ tâm nên không đụng tới vị trí đã lưu.
            */
-          const tg = tugStart.current
-          if (tg) {
-            stage?.setTug({ x: (e.clientX - tg.x) / r.width, y: (e.clientY - tg.y) / r.height })
-            if (Math.abs(e.clientX - tg.x) > 12 || Math.abs(e.clientY - tg.y) > 12) markHintDone('tug')
-            return
-          }
-          // Còn lại là Ctrl+kéo dời khung — chuyển tiếp cho hook kéo-di-chuyển
-          headerHandlers.onPointerMove(e)
-        }}
-        onPointerDown={(e) => {
-          /**
-           * Ba kiểu kéo, phân biệt bằng phím bổ trợ:
-           * - **Shift+kéo** = xoay người.
-           * - **Ctrl+kéo** = dời nhân vật đi chỗ khác (trước đây là kéo trần).
-           * - **kéo trần** = níu nhân vật, buông thì bật về chỗ cũ.
-           *
-           * Đổi kéo-trần từ "dời" sang "níu" là yêu cầu của user. Dời vẫn phải còn một đường
-           * vào (Ctrl) — không thì nhân vật kẹt cứng tại chỗ, không cách nào dời.
-           */
-          if (e.shiftKey && chromeless) {
-            e.stopPropagation()
-            rotating.current = e.clientX
-            e.currentTarget.setPointerCapture(e.pointerId)
-            markHintDone('rotate')
-            return
-          }
-          /**
-           * ⚠️ Bấm vào một BẢNG NỔI (cài đặt, chat, danh sách) thì **không phải** chạm vào nhân vật.
-           *
-           * Các bảng đó mở ĐÈ lên người, mà `hitTest` chỉ là hộp bao quanh xương — nó không biết
-           * có tấm bảng nào nằm trên. Thiếu bước này thì bấm một nút trong bảng sẽ vừa khởi động
-           * kéo-níu vừa hẹn mở chat, và `setPointerCapture` kéo con trỏ về div này nên **nút không
-           * bao giờ nhận được `click`** (cùng họ với bẫy `setPointerCapture` đã làm ô checkbox
-           * không tích được). `onClick` đã có bước chặn này, nhưng thiếu ở `pointerdown` thì hỏng
-           * ngay từ đầu chuỗi sự kiện.
-           */
-          if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
-
-          // Kéo trần trên THÂN NGƯỜI = níu. Bấm vào góc khung trống thì không — ở đó không có gì
-          // để níu, và để nguyên cho hook kéo xử lý thì user vẫn dời được như thói quen cũ.
-          if (chromeless && !e.ctrlKey && !e.metaKey && e.button === 0) {
-            const r = e.currentTarget.getBoundingClientRect()
-            const nx = ((e.clientX - r.left) / r.width) * 2 - 1
-            const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
-            if (stage?.hitTest(nx, ny)) {
-              tugStart.current = { x: e.clientX, y: e.clientY }
-              e.currentTarget.setPointerCapture(e.pointerId)
-            }
-          }
-          /**
-           * Nhấn GIỮ ~500ms trên người → mở chat.
-           *
-           * Ghi lại điểm bấm để `onPointerMove` huỷ khi user thật ra đang **kéo**: không có
-           * bước đó thì mỗi lần dời nhân vật lại bật khung chat ra giữa chừng.
-           */
-          if (chromeless && e.button === 0) {
-            const r = e.currentTarget.getBoundingClientRect()
-            const nx = ((e.clientX - r.left) / r.width) * 2 - 1
-            const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
-            // Chỉ tính khi bấm trúng THÂN NGƯỜI, không phải góc khung trống
-            if (stage?.hitTest(nx, ny)) {
-              holdStart.current = { x: e.clientX, y: e.clientY }
-              holdTimer.current = window.setTimeout(() => {
-                holdTimer.current = null
-                holdFired.current = true
-                setChatOpen(true)
-                useVrmChatStore.getState().setMini(false)
-                markHintDone('hold')
-              }, 500)
-            }
-          }
-          headerHandlers.onPointerDown(e)
-        }}
-        onPointerUp={(e) => {
-          // Thả tay trước 500ms → không phải nhấn giữ, huỷ hẹn
-          cancelHold()
-          if (rotating.current !== null) {
-            rotating.current = null
-            // Thả tay mới ghi xuống đĩa (xem `onRotateBy`)
-            onRotateBy(0, true)
-            return
-          }
-          // Buông tay níu → lò xo trong stage tự đưa thân về chỗ cũ
-          if (tugStart.current) {
-            tugStart.current = null
-            stage?.setTug(null)
-            return
-          }
-          headerHandlers.onPointerUp(e)
-        }}
-        onPointerCancel={() => {
-          // Mất pointer giữa chừng (chuyển cửa sổ, alt-tab) cũng phải buông — không thì thân
-          // ngả mãi một bên vì không bao giờ có `pointerup`
-          if (tugStart.current) {
-            tugStart.current = null
-            stage?.setTug(null)
-          }
-        }}
-        onClick={(e) => {
-          if (!chromeless || !stage) return
-          // Nhấn giữ vừa mở chat → KHÔNG `poke` nữa: trình duyệt vẫn sinh `click` sau đó, để
-          // nguyên là nhân vật vừa mở chat vừa giật mình phản ứng
-          if (holdFired.current) {
-            holdFired.current = false
-            return
-          }
-          // Bấm vào bảng nổi (cài đặt, chat, danh sách) thì không phải là chạm vào nhân vật —
-          // các bảng đó nằm đè lên người nên raycast vẫn trúng nếu không chặn ở đây
-          if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
-          const r = e.currentTarget.getBoundingClientRect()
-          const nx = ((e.clientX - r.left) / r.width) * 2 - 1
-          const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
-          // Raycast: chỉ phản ứng khi click trúng THÂN NGƯỜI, không phải góc khung trống
-          // `poke` tự bốc kiểu phản ứng và biểu cảm hợp với kiểu đó
-          if (stage.hitTest(nx, ny)) {
-            stage.poke()
-            // Clip giật mình — chạy một lần rồi tự trả về chuyển động thường
-            motion.play('poke')
-            markHintDone('poke')
-          }
-        }}
-      >
-        {/* Canvas do `createVrmStage` tự tạo và tự gỡ — KHÔNG render ở đây. Canvas đã bị
-            `forceContextLoss()` thì chết vĩnh viễn, nên mỗi model phải có thẻ riêng; để React
-            giữ một thẻ dùng lại thì đổi model là vỡ ngay. */}
-        {/* `z-10`: canvas do stage chèn thẳng vào DOM nên đứng sau các nút của React trong
-            thứ tự anh em — thiếu z-index thì lời báo lỗi/tiến độ bị canvas che mất. */}
-        {overlay && <div className="absolute inset-0 z-10 flex items-center justify-center">{overlay}</div>}
-
-        {menu && (
-          <VrmRadialMenu
-            x={menu.x}
-            y={menu.y}
-            onDismiss={() => setMenu(null)}
-            actions={[
+          showSettings && chromeless
+            ? /**
+               * Đứng trong KHE GIỮA khung cài đặt — công thức dùng chung, xem `characterSlotInSettings`.
+               *
+               * Nhân vật cao hơn lòng khung thì thu nhỏ bằng `transform: scale`, **không đổi
+               * `width`/`height`**: đổi kích thước thẻ làm `ResizeObserver` gọi `stage.resize()`,
+               * dựng lại render target và căn lại camera — giật một nhịp mỗi lần mở/đóng cài đặt.
+               * `scale` chỉ co ảnh đã vẽ, không đụng gì tới scene.
+               */
               {
-                id: 'expr',
-                icon: '😊',
-                label: `Biểu cảm (${expressions.length})`,
-                onSelect: () => setSide('expr')
-              },
-              {
-                id: 'parts',
-                icon: '👗',
-                label: 'Trang phục',
-                onSelect: () => {
-                  setSide('parts')
-                  markHintDone('outfit')
-                }
-              },
-              {
-                id: 'chat',
-                icon: '💬',
-                label: 'Hỏi trợ lý AI',
-                // Bỏ thu nhỏ: chọn "hỏi" mà ra bong bóng chỉ đọc được thì user phải bấm thêm
-                // một lần nữa mới gõ được — trạng thái mini là của lần trước, không phải ý bây giờ
-                onSelect: () => {
-                  useVrmChatStore.getState().setMini(false)
-                  setChatOpen(true)
-                }
-              },
-              {
-                id: 'tools',
-                icon: '🧰',
-                label: 'Công cụ',
-                onSelect: () => setToolRing({ x: menu.x, y: menu.y })
-              },
-              { id: 'motion', icon: '🎬', label: 'Chuyển động', onSelect: () => setSide('motion') },
-              { id: 'models', icon: '🧑‍🎤', label: 'Đổi nhân vật', onSelect: () => setSide('models') },
-              { id: 'settings', icon: '⚙', label: 'Cài đặt', onSelect: () => setShowSettings(true) },
-              {
-                id: 'reset',
-                icon: '↺',
-                label: 'Về cỡ & góc mặc định',
-                onSelect: () => onResetView()
-              },
-            ]}
-          />
-        )}
-
-        {/* Bong bóng thoại khi có thông báo — chỉ ở chế độ không khung, vì lúc có khung thì
-            panel đã là một hộp có chữ, thêm bong bóng nữa là hai lớp chữ chồng nhau.
-            Đang mở chat thì nhường chỗ: hai bong bóng cùng nằm trên đầu là chồng lên nhau. */}
-        {bubble && chromeless && !chatOpen && (
-          <VrmSpeechBubble text={bubble.text} severity={bubble.severity} anchor={anchorRect()} />
-        )}
-
-        {chatOpen && (
-          <VrmChatBubble
-            anchor={anchorRect()}
-            onClose={() => setChatOpen(false)}
-            onOpenFull={() => {
-              setChatOpen(false)
-              // Mở qua `openTool` như mọi lối vào khác — nó là nơi DUY NHẤT biết Trợ lý AI mở
-              // dạng dock hay tab, và lượt dùng cũng được đếm đúng
-              const ai = TOOLS.find((x) => x.id === 'ai')
-              if (ai) openTool(ai)
-            }}
-          />
-        )}
-
-        {/* Vòng con: công cụ đã ghim trên Dashboard + nút "Tất cả" + đường quay lại vòng chính */}
-        {toolRing && (
-          <VrmRadialMenu
-            x={toolRing.x}
-            y={toolRing.y}
-            onDismiss={() => setToolRing(null)}
-            actions={[
-              ...pinnedToolActions,
-              {
-                id: 'back',
-                icon: '↩',
-                label: 'Quay lại',
-                // Không có nút này thì muốn về menu chính phải đóng rồi chuột phải lại từ đầu
-                onSelect: () => {
-                  setMenu({ x: toolRing.x, y: toolRing.y })
-                  setToolRing(null)
-                }
+                left: settingsSlot.left,
+                top: settingsSlot.top,
+                transform: settingsSlot.scale < 1 ? `scale(${settingsSlot.scale})` : undefined,
+                transformOrigin: 'bottom center'
               }
-            ]}
-          />
-        )}
-
-        {/* Bảng hai bên: giữa để trống cho nhân vật nên vừa chọn vừa thấy kết quả */}
-        {side === 'expr' && (
-          <VrmSidePanel
-            title="Biểu cảm"
-            items={expressions.map((e) => ({ id: e, label: e }))}
-            onPick={(id) => stage?.playExpression([id])}
-            anchor={anchorRect()}
-            onClose={() => setSide(null)}
-          />
-        )}
-        {side === 'parts' && (
-          <VrmOutfitPanel
-            modelId={activeModelId}
-            parts={parts}
-            onTogglePart={onTogglePart}
-            onApplyOutfit={onApplyOutfit}
-            anchor={anchorRect()}
-            onClose={() => setSide(null)}
-          />
-        )}
-        {side === 'motion' &&
+            : pos
+              ? // Đã kéo tay: giữ đúng chỗ user đặt, CHỈ đẩy sang trái khi chỗ đó lọt vào vùng dock
+                { left: dockW > 0 ? Math.min(pos.x, window.innerWidth - dockW - width - 8) : pos.x, top: pos.y }
+              : chromeless
+                ? { right: CHROMELESS_RIGHT_GAP + dockW }
+                : { top: 56 }
+        }
+        /**
+         * `absolute` theo thẻ gốc `App` (`relative isolate`, phủ đúng màn hình, không transform) —
+         * nên toạ độ màn hình của `characterSlotInSettings` dùng thẳng được, trùng hệ với khung cài
+         * đặt `fixed`. Khung đó là **ANH EM** của thẻ này (xem cuối hàm), không phải con: con `fixed`
+         * của một cha có `transform: scale()` sẽ bị co và dời theo cha — đúng lỗi user chụp được.
+         */
+        className={`absolute z-40 flex flex-col ${
+          showSettings && chromeless ? '' : pos ? '' : chromeless ? 'bottom-3' : 'right-3'
+        } ${
+          chromeless
+            ? /**
+               * Trượt khi cùng một thuộc tính đổi giá trị (dock mở/đóng dời `left`/`right`; đã kéo
+               * tay rồi mở cài đặt thì `left`/`top` trượt vào khe). Từ neo mặc định `right`/`bottom`
+               * sang `left`/`top` thì **nhảy** — trình duyệt không nội suy giữa hai thuộc tính khác.
+               */
+              'pointer-events-none transition-[left,right,bottom,top,transform] duration-300'
+            : 'bg-elevated/95 border-edge-strong w-80 gap-2 overflow-hidden rounded-lg border p-3 opacity-95 shadow-2xl transition-opacity hover:opacity-100'
+        }`}
+      >
+        {/* Canvas phải có kích thước THẬT từ CSS: WebGLRenderer đọc clientWidth/Height lúc dựng,
+            canvas cao 0 thì scene trống mà không báo lỗi gì. Kéo bằng chính thân nhân vật —
+            không khung thì không còn header để nắm; chuột phải mở menu. */}
+        {/**
+         * Khi CỘT DOCK AI mở (⛶ từ bong bóng chat, hoặc mở Trợ lý AI/Chẩn đoán/Codex): nhân vật
+         * mờ đi và **không nhận chuột nữa**. Đóng dock là bấm/kéo lại bình thường.
+         *
+         * Bong bóng chat NHỎ thì KHÔNG tắt: nó chỉ chiếm một dải trên đầu, người vẫn phải bấm/kéo
+         * được — user đã yêu cầu rõ. Bản đầu tắt cả lúc chat nhỏ và bị bắt sửa lại.
+         *
+         * Tắt chuột lúc dock mở còn chặn một lỗi thật: model đang bị đẩy sang trái né dock, chỉ
+         * cần một cú click xê dịch 1px là hook kéo-thả **ghi lại vị trí đã đẩy** thành vị trí user
+         * chọn — đóng dock xong nhân vật ở lại đó, "không về chỗ cũ". Không nhận chuột thì không
+         * có gì để ghi.
+         *
+         * `pointer-events-none` chứ không `opacity-0`: ẩn bằng opacity KHÔNG tắt vùng nhận chuột
+         * — đã dính đúng bẫy đó với hai nút ✕/⚙ trước đây.
+         *
+         * ⚠️ Chỉ đổi CLASS trên chính div này, tuyệt đối không bọc thêm/bỏ bớt thẻ: `boxRef` là
+         * nơi canvas WebGL cắm vào, đổi cấu trúc DOM là mất context và phải nạp lại model 40 MB.
+         */}
+        <div
+          ref={boxRef}
+          style={chromeless ? { height: H, width } : undefined}
+          className={`relative shrink-0 transition-opacity duration-200 ${
+            chromeless ? 'pointer-events-auto cursor-grab active:cursor-grabbing' : 'h-[380px] w-full overflow-hidden'
+          } ${dockOpen ? 'pointer-events-none opacity-40' : showSettings && chromeless ? 'opacity-55' : ''}`}
           /**
-           * Chưa tải clip thì hộp nhỏ (chỉ một nút); tải rồi thì **hai cột hai bên nhân vật** như
-           * bảng biểu cảm — user yêu cầu rõ: đừng đè lên người.
+           * Tooltip NGẮN. Bản trước liệt kê cả 5 thao tác nên Windows vẽ ra một dải chữ chạy ngang
+           * gần hết màn hình, che mất chính nhân vật — mà tooltip thì tự hiện khi rê chuột, user
+           * không bấm gì cũng phải chịu. Danh sách đầy đủ đã có ở menu chuột phải và ở các câu gợi ý
+           * nhân vật tự nói, nên ở đây chỉ cần chỉ đường tới đó.
            */
-          (motion.installed.length === 0 ? (
-            <VrmMotionPanel motion={motion} anchor={anchorRect()} onClose={() => setSide(null)} onSpeak={onSpeak} />
-          ) : (
-            <VrmSidePanel
-              title="Chuyển động"
-              items={[
-                // Dừng đứng đầu để lúc đang chạy clip thì nó ở ngay tầm mắt
-                ...(motion.playing ? [{ id: '__stop', label: '■ Dừng' }] : []),
-                ...motion.clips.map((c) => ({
-                  id: c.id,
-                  label: `${c.label}${c.locomotion ? ' 🚶' : ''}`,
-                  active: motion.playing === c.id
-                }))
+          title="Chuột phải để mở menu"
+          onContextMenu={(e) => {
+            if (!chromeless) return
+            // Chuột phải TRONG một bảng nổi là việc của bảng đó, không phải mở menu nhân vật
+            if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
+            // Chặn menu ngữ cảnh mặc định của Chromium, nếu không nó đè lên menu của mình
+            e.preventDefault()
+            // Toạ độ MÀN HÌNH: vòng tròn vẽ ở lớp phủ toàn cửa sổ, không trong khung hẹp
+            setMenu({ x: e.clientX, y: e.clientY })
+            markHintDone('menu')
+          }}
+          onWheel={(e) => {
+            // CHỈ khi giữ Ctrl: lăn trần phải để nguyên cho trang phía sau cuộn
+            if (!e.ctrlKey) return
+            // Lăn trong bảng nổi là để CUỘN BẢNG (bảng cài đặt có vùng cuộn), không phóng nhân vật
+            if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
+            e.preventDefault()
+            onZoom(e.deltaY)
+            markHintDone('zoom')
+          }}
+          onPointerMove={(e) => {
+            // Nhích quá 6px là user đang KÉO chứ không phải nhấn giữ → huỷ hẹn mở chat
+            const h = holdStart.current
+            if (h && (Math.abs(e.clientX - h.x) > 6 || Math.abs(e.clientY - h.y) > 6)) {
+              cancelHold()
+              // Nhích quá ngưỡng từ một cú bấm trên người (không Shift) = đang KÉO dời nhân vật
+              if (!e.shiftKey) markHintDone('move')
+            }
+
+            // Vị trí con trỏ do listener toàn cửa sổ lo (xem effect `pointermove` ở trên) —
+            // ở đây chỉ còn việc kéo xoay
+            const r = e.currentTarget.getBoundingClientRect()
+            if (rotating.current !== null) {
+              // Kéo ngang cả bề rộng khung = xoay đúng một vòng
+              onRotateBy(((e.clientX - rotating.current) / r.width) * Math.PI * 2, false)
+              rotating.current = e.clientX
+              return
+            }
+            /**
+             * Kéo TRẦN = níu nhân vật (không dời khung). Gửi độ lệch theo TỈ LỆ khung nên kéo trên
+             * khung nhỏ hay to đều ra cùng độ ngả — stage không biết gì về pixel.
+             */
+            const tg = tugStart.current
+            if (tg) {
+              stage?.setTug({ x: (e.clientX - tg.x) / r.width, y: (e.clientY - tg.y) / r.height })
+              if (Math.abs(e.clientX - tg.x) > 12 || Math.abs(e.clientY - tg.y) > 12) markHintDone('tug')
+              return
+            }
+            // Còn lại là Ctrl+kéo dời khung — chuyển tiếp cho hook kéo-di-chuyển
+            headerHandlers.onPointerMove(e)
+          }}
+          onPointerDown={(e) => {
+            /**
+             * Ba kiểu kéo, phân biệt bằng phím bổ trợ:
+             * - **Shift+kéo** = xoay người.
+             * - **Ctrl+kéo** = dời nhân vật đi chỗ khác (trước đây là kéo trần).
+             * - **kéo trần** = níu nhân vật, buông thì bật về chỗ cũ.
+             *
+             * Đổi kéo-trần từ "dời" sang "níu" là yêu cầu của user. Dời vẫn phải còn một đường
+             * vào (Ctrl) — không thì nhân vật kẹt cứng tại chỗ, không cách nào dời.
+             */
+            if (e.shiftKey && chromeless) {
+              e.stopPropagation()
+              rotating.current = e.clientX
+              e.currentTarget.setPointerCapture(e.pointerId)
+              markHintDone('rotate')
+              return
+            }
+            /**
+             * ⚠️ Bấm vào một BẢNG NỔI (cài đặt, chat, danh sách) thì **không phải** chạm vào nhân vật.
+             *
+             * Các bảng đó mở ĐÈ lên người, mà `hitTest` chỉ là hộp bao quanh xương — nó không biết
+             * có tấm bảng nào nằm trên. Thiếu bước này thì bấm một nút trong bảng sẽ vừa khởi động
+             * kéo-níu vừa hẹn mở chat, và `setPointerCapture` kéo con trỏ về div này nên **nút không
+             * bao giờ nhận được `click`** (cùng họ với bẫy `setPointerCapture` đã làm ô checkbox
+             * không tích được). `onClick` đã có bước chặn này, nhưng thiếu ở `pointerdown` thì hỏng
+             * ngay từ đầu chuỗi sự kiện.
+             */
+            if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
+
+            // Kéo trần trên THÂN NGƯỜI = níu. Bấm vào góc khung trống thì không — ở đó không có gì
+            // để níu, và để nguyên cho hook kéo xử lý thì user vẫn dời được như thói quen cũ.
+            if (chromeless && !e.ctrlKey && !e.metaKey && e.button === 0) {
+              const r = e.currentTarget.getBoundingClientRect()
+              const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+              const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
+              if (stage?.hitTest(nx, ny)) {
+                tugStart.current = { x: e.clientX, y: e.clientY }
+                e.currentTarget.setPointerCapture(e.pointerId)
+              }
+            }
+            /**
+             * Nhấn GIỮ ~500ms trên người → mở chat.
+             *
+             * Ghi lại điểm bấm để `onPointerMove` huỷ khi user thật ra đang **kéo**: không có
+             * bước đó thì mỗi lần dời nhân vật lại bật khung chat ra giữa chừng.
+             */
+            if (chromeless && e.button === 0) {
+              const r = e.currentTarget.getBoundingClientRect()
+              const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+              const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
+              // Chỉ tính khi bấm trúng THÂN NGƯỜI, không phải góc khung trống
+              if (stage?.hitTest(nx, ny)) {
+                holdStart.current = { x: e.clientX, y: e.clientY }
+                holdTimer.current = window.setTimeout(() => {
+                  holdTimer.current = null
+                  holdFired.current = true
+                  setChatOpen(true)
+                  useVrmChatStore.getState().setMini(false)
+                  markHintDone('hold')
+                }, 500)
+              }
+            }
+            headerHandlers.onPointerDown(e)
+          }}
+          onPointerUp={(e) => {
+            // Thả tay trước 500ms → không phải nhấn giữ, huỷ hẹn
+            cancelHold()
+            if (rotating.current !== null) {
+              rotating.current = null
+              // Thả tay mới ghi xuống đĩa (xem `onRotateBy`)
+              onRotateBy(0, true)
+              return
+            }
+            // Buông tay níu → lò xo trong stage tự đưa thân về chỗ cũ
+            if (tugStart.current) {
+              tugStart.current = null
+              stage?.setTug(null)
+              return
+            }
+            headerHandlers.onPointerUp(e)
+          }}
+          onPointerCancel={() => {
+            // Mất pointer giữa chừng (chuyển cửa sổ, alt-tab) cũng phải buông — không thì thân
+            // ngả mãi một bên vì không bao giờ có `pointerup`
+            if (tugStart.current) {
+              tugStart.current = null
+              stage?.setTug(null)
+            }
+          }}
+          onClick={(e) => {
+            if (!chromeless || !stage) return
+            // Nhấn giữ vừa mở chat → KHÔNG `poke` nữa: trình duyệt vẫn sinh `click` sau đó, để
+            // nguyên là nhân vật vừa mở chat vừa giật mình phản ứng
+            if (holdFired.current) {
+              holdFired.current = false
+              return
+            }
+            // Bấm vào bảng nổi (cài đặt, chat, danh sách) thì không phải là chạm vào nhân vật —
+            // các bảng đó nằm đè lên người nên raycast vẫn trúng nếu không chặn ở đây
+            if ((e.target as HTMLElement).closest('[data-vrm-overlay]')) return
+            const r = e.currentTarget.getBoundingClientRect()
+            const nx = ((e.clientX - r.left) / r.width) * 2 - 1
+            const ny = -(((e.clientY - r.top) / r.height) * 2 - 1)
+            // Raycast: chỉ phản ứng khi click trúng THÂN NGƯỜI, không phải góc khung trống
+            // `poke` tự bốc kiểu phản ứng và biểu cảm hợp với kiểu đó
+            if (stage.hitTest(nx, ny)) {
+              stage.poke()
+              // Clip giật mình — chạy một lần rồi tự trả về chuyển động thường
+              motion.play('poke')
+              markHintDone('poke')
+            }
+          }}
+        >
+          {/* Canvas do `createVrmStage` tự tạo và tự gỡ — KHÔNG render ở đây. Canvas đã bị
+              `forceContextLoss()` thì chết vĩnh viễn, nên mỗi model phải có thẻ riêng; để React
+              giữ một thẻ dùng lại thì đổi model là vỡ ngay. */}
+          {/* `z-10`: canvas do stage chèn thẳng vào DOM nên đứng sau các nút của React trong
+              thứ tự anh em — thiếu z-index thì lời báo lỗi/tiến độ bị canvas che mất. */}
+          {overlay && <div className="absolute inset-0 z-10 flex items-center justify-center">{overlay}</div>}
+
+          {menu && (
+            <VrmRadialMenu
+              x={menu.x}
+              y={menu.y}
+              onDismiss={() => setMenu(null)}
+              actions={[
+                {
+                  id: 'expr',
+                  icon: '😊',
+                  label: `Biểu cảm (${expressions.length})`,
+                  onSelect: () => setSide('expr')
+                },
+                {
+                  id: 'parts',
+                  icon: '👗',
+                  label: 'Trang phục',
+                  onSelect: () => {
+                    setSide('parts')
+                    markHintDone('outfit')
+                  }
+                },
+                {
+                  id: 'chat',
+                  icon: '💬',
+                  label: 'Hỏi trợ lý AI',
+                  // Bỏ thu nhỏ: chọn "hỏi" mà ra bong bóng chỉ đọc được thì user phải bấm thêm
+                  // một lần nữa mới gõ được — trạng thái mini là của lần trước, không phải ý bây giờ
+                  onSelect: () => {
+                    useVrmChatStore.getState().setMini(false)
+                    setChatOpen(true)
+                  }
+                },
+                {
+                  id: 'tools',
+                  icon: '🧰',
+                  label: 'Công cụ',
+                  onSelect: () => setToolRing({ x: menu.x, y: menu.y })
+                },
+                { id: 'motion', icon: '🎬', label: 'Chuyển động', onSelect: () => setSide('motion') },
+                { id: 'models', icon: '🧑‍🎤', label: 'Đổi nhân vật', onSelect: () => setSide('models') },
+                { id: 'settings', icon: '⚙', label: 'Cài đặt', onSelect: () => setShowSettings(true) },
+                {
+                  id: 'reset',
+                  icon: '↺',
+                  label: 'Về cỡ & góc mặc định',
+                  onSelect: () => onResetView()
+                },
               ]}
-              activeId={motion.playing}
-              onPick={(id) => (id === '__stop' ? motion.stop() : motion.playById(id))}
+            />
+          )}
+
+          {/* Bong bóng thoại khi có thông báo — chỉ ở chế độ không khung, vì lúc có khung thì
+              panel đã là một hộp có chữ, thêm bong bóng nữa là hai lớp chữ chồng nhau.
+              Đang mở chat thì nhường chỗ: hai bong bóng cùng nằm trên đầu là chồng lên nhau. */}
+          {bubble && chromeless && !chatOpen && (
+            <VrmSpeechBubble text={bubble.text} severity={bubble.severity} anchor={anchorRect()} />
+          )}
+
+          {chatOpen && (
+            <VrmChatBubble
+              anchor={anchorRect()}
+              onClose={() => setChatOpen(false)}
+              onOpenFull={() => {
+                setChatOpen(false)
+                // Mở qua `openTool` như mọi lối vào khác — nó là nơi DUY NHẤT biết Trợ lý AI mở
+                // dạng dock hay tab, và lượt dùng cũng được đếm đúng
+                const ai = TOOLS.find((x) => x.id === 'ai')
+                if (ai) openTool(ai)
+              }}
+            />
+          )}
+
+          {/* Vòng con: công cụ đã ghim trên Dashboard + nút "Tất cả" + đường quay lại vòng chính */}
+          {toolRing && (
+            <VrmRadialMenu
+              x={toolRing.x}
+              y={toolRing.y}
+              onDismiss={() => setToolRing(null)}
+              actions={[
+                ...pinnedToolActions,
+                {
+                  id: 'back',
+                  icon: '↩',
+                  label: 'Quay lại',
+                  // Không có nút này thì muốn về menu chính phải đóng rồi chuột phải lại từ đầu
+                  onSelect: () => {
+                    setMenu({ x: toolRing.x, y: toolRing.y })
+                    setToolRing(null)
+                  }
+                }
+              ]}
+            />
+          )}
+
+          {/* Bảng hai bên: giữa để trống cho nhân vật nên vừa chọn vừa thấy kết quả */}
+          {side === 'expr' && (
+            <VrmSidePanel
+              title="Biểu cảm"
+              items={expressions.map((e) => ({ id: e, label: e }))}
+              onPick={(id) => stage?.playExpression([id])}
               anchor={anchorRect()}
               onClose={() => setSide(null)}
             />
-          ))}
-        {side === 'models' && (
-          <VrmSidePanel
-            title="Nhân vật"
-            items={models.map((m) => ({ id: m.id, label: m.label + (m.missing ? ' (mất file)' : '') }))}
-            activeId={activeModelId}
-            onPick={(id) => {
-              onPickModel(id)
-              setSide(null)
-            }}
-            // Bảng vẫn mở sau khi xoá: dọn danh sách thường là xoá vài cái liền một lúc
-            onRemove={onRemoveModel}
-            anchor={anchorRect()}
-            onClose={() => setSide(null)}
-          />
-        )}
+          )}
+          {side === 'parts' && (
+            <VrmOutfitPanel
+              modelId={activeModelId}
+              parts={parts}
+              onTogglePart={onTogglePart}
+              onApplyOutfit={onApplyOutfit}
+              anchor={anchorRect()}
+              onClose={() => setSide(null)}
+            />
+          )}
+          {side === 'motion' &&
+            /**
+             * Chưa tải clip thì hộp nhỏ (chỉ một nút); tải rồi thì **hai cột hai bên nhân vật** như
+             * bảng biểu cảm — user yêu cầu rõ: đừng đè lên người.
+             */
+            (motion.installed.length === 0 ? (
+              <VrmMotionPanel motion={motion} anchor={anchorRect()} onClose={() => setSide(null)} onSpeak={onSpeak} />
+            ) : (
+              <VrmSidePanel
+                title="Chuyển động"
+                items={[
+                  // Dừng đứng đầu để lúc đang chạy clip thì nó ở ngay tầm mắt
+                  ...(motion.playing ? [{ id: '__stop', label: '■ Dừng' }] : []),
+                  ...motion.clips.map((c) => ({
+                    id: c.id,
+                    label: `${c.label}${c.locomotion ? ' 🚶' : ''}`,
+                    active: motion.playing === c.id
+                  }))
+                ]}
+                activeId={motion.playing}
+                onPick={(id) => (id === '__stop' ? motion.stop() : motion.playById(id))}
+                anchor={anchorRect()}
+                onClose={() => setSide(null)}
+              />
+            ))}
+          {side === 'models' && (
+            <VrmSidePanel
+              title="Nhân vật"
+              items={models.map((m) => ({ id: m.id, label: m.label + (m.missing ? ' (mất file)' : '') }))}
+              activeId={activeModelId}
+              onPick={(id) => {
+                onPickModel(id)
+                setSide(null)
+              }}
+              // Bảng vẫn mở sau khi xoá: dọn danh sách thường là xoá vài cái liền một lúc
+              onRemove={onRemoveModel}
+              anchor={anchorRect()}
+              onClose={() => setSide(null)}
+            />
+          )}
+        </div>
 
-        {chromeless && showSettings && controls && (
-          <VrmSettingsFrame anchor={anchorRect()} onClose={() => setShowSettings(false)}>
-            {controls}
-          </VrmSettingsFrame>
-        )}
+        {/* Có khung thì controls hiện THẲNG, không giấu sau menu: trong đó có tác giả + giấy phép
+            model, mà quy tắc của `ModelInfo` là "hiện chứ không chặn" — giấu đi thì user không
+            biết mình đang dùng model tác giả cấm dùng thương mại. Không khung thì đành phải giấu
+            (chữ trên nền trong suốt không đọc nổi), đó là cái giá của việc bỏ khung. */}
+        {!chromeless && controls?.()}
       </div>
 
-      {/* Có khung thì controls hiện THẲNG, không giấu sau menu: trong đó có tác giả + giấy phép
-          model, mà quy tắc của `ModelInfo` là "hiện chứ không chặn" — giấu đi thì user không
-          biết mình đang dùng model tác giả cấm dùng thương mại. Không khung thì đành phải giấu
-          (chữ trên nền trong suốt không đọc nổi), đó là cái giá của việc bỏ khung. */}
-      {!chromeless && controls}
-    </div>
+      {/**
+       * Khung cài đặt là **ANH EM** của thẻ nhân vật, cố ý không đặt bên trong: thẻ nhân vật có
+       * `transform: scale()` + `opacity`, con `fixed` của nó sẽ bị co, dời và mờ theo — đúng ba
+       * lỗi user chụp được (bảng văng khỏi tâm, kéo cỡ thì bảng to nhỏ theo, bảng mờ). Xem
+       * `VrmSettingsFrame`. Hộp `settingsBox` là hộp nhân vật cũng dùng để đứng vào khe.
+       */}
+      {chromeless && showSettings && controls && (
+        <VrmSettingsFrame box={settingsBox} right={controls('right')} onClose={() => setShowSettings(false)}>
+          {controls('left')}
+        </VrmSettingsFrame>
+      )}
+    </>
   )
 }
 
@@ -1348,7 +1449,8 @@ function VrmControls({
   onPickAnimation,
   onClearAnimation,
   onCloseCharacter,
-  onDownloaded
+  onDownloaded,
+  only
 }: {
   readonly models: VrmModelDto[]
   readonly active: VrmModelDto | null
@@ -1364,8 +1466,24 @@ function VrmControls({
   readonly onClearAnimation: () => void
   /** Tắt hẳn nhân vật — chuyển từ menu vòng tròn về đây cho khỏi bấm nhầm. */
   readonly onCloseCharacter: () => void
+  /**
+   * Chỉ vẽ MỘT cột của bảng cài đặt: `'left'` (công tắc hằng ngày) hoặc `'right'` (mục dùng thưa).
+   *
+   * `VrmSettingsFrame` dựng hai khe thật với khoảng trống ở giữa cho nhân vật, nên nó gọi component
+   * này **hai lần**, mỗi lần một cột. Không dùng `column-count` của CSS: nó chỉ chia khi nội dung
+   * đủ cao để tràn, mà bảng này ngắn nên dồn hết vào cột trái và chừa cột phải trống — đúng lỗi
+   * user chụp được. Bỏ trống = vẽ cả hai, xếp chồng (chế độ có khung).
+   */
+  readonly only?: 'left' | 'right'
 }) {
-  return (
+  /**
+   * Trần cỡ: THẤP khi đang ở khung cài đặt (`only` có giá trị) — khe giữa hẹp, to hơn là nhân vật
+   * tràn sang hai cột chữ; xem `VRM_ZOOM_MAX_IN_SETTINGS`. Thanh trượt, giá trị và nhãn % cùng
+   * dùng một trần này.
+   */
+  const zoomCap = only !== undefined ? VRM_ZOOM_MAX_IN_SETTINGS : VRM_ZOOM_MAX
+  /** Mục dùng HẰNG NGÀY: công tắc, cỡ, đổi model. */
+  const left = (
     <div className="flex flex-col gap-2">
       <div className="text-subtle flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
         <label className="flex items-center gap-1.5">
@@ -1419,16 +1537,18 @@ function VrmControls({
 
       <div className="text-subtle flex items-center gap-2 text-xs">
         <span className="shrink-0">Cỡ</span>
+        {/* Thanh trượt, giá trị VÀ nhãn % đều theo `zoomCap`: cỡ đã lưu 300% mà nhãn nói 300% trong
+            khi người trên màn hình đang bị kẹp 120% là nhãn nói dối. */}
         <input
           type="range"
           className="min-w-0 flex-1"
           min={VRM_ZOOM_MIN}
-          max={VRM_ZOOM_MAX}
+          max={zoomCap}
           step={0.05}
-          value={settings.zoom}
+          value={Math.min(settings.zoom, zoomCap)}
           onChange={(e) => onPatch({ zoom: Number(e.target.value) })}
         />
-        <span className="w-10 shrink-0 text-right tabular-nums">{Math.round(settings.zoom * 100)}%</span>
+        <span className="w-10 shrink-0 text-right tabular-nums">{Math.round(Math.min(settings.zoom, zoomCap) * 100)}%</span>
         {(settings.zoom !== 1 || settings.rotationY !== 0) && (
           <button
             className="border-edge hover:bg-elevated shrink-0 rounded border px-1.5 py-0.5"
@@ -1486,7 +1606,15 @@ function VrmControls({
        * dải chữ chạy gần hết màn hình, tự hiện mỗi lần rê chuột và che mất chính nhân vật.
        * Ở đây thì user chủ động mở khi cần, và nhân vật vẫn tự kể dần qua các câu gợi ý.
        */}
-      <details className="group border-edge border-t pt-2">
+    </div>
+  )
+
+  /** Mục dùng THƯA: bảng tra thao tác, thêm nhân vật, chuyển động, tắt nhân vật. */
+  const right = (
+    <div className="flex flex-col gap-2">
+      {/* Mở sẵn khi ở khung cài đặt lớn (`only` có giá trị): khung đã rộng, giấu đi chỉ bắt user
+          bấm thêm một lần. Chế độ panel nhỏ thì vẫn thu gọn vì chỗ chật. */}
+      <details className="group" open={only !== undefined}>
         <summary className="text-subtle hover:text-content flex cursor-pointer list-none items-center gap-1 text-xs">
           <span className="group-open:hidden">▸</span>
           <span className="hidden group-open:inline">▾</span>
@@ -1510,7 +1638,7 @@ function VrmControls({
         </div>
       </details>
 
-      <details className="group border-edge border-t pt-2">
+      <details className="group border-edge border-t pt-2" open={only !== undefined}>
         <summary className="text-subtle hover:text-content flex cursor-pointer list-none items-center gap-1 text-xs">
           <span className="group-open:hidden">▸</span>
           <span className="hidden group-open:inline">▾</span>
@@ -1520,7 +1648,8 @@ function VrmControls({
         <div className="mt-2 flex flex-col gap-2">
           {/* Tải model mẫu — cũng để Ở ĐÂY, không chỉ ở màn hình mời chọn: ai đã có sẵn một model
               thì không bao giờ thấy màn hình đó, nên sẽ không biết có model mẫu để tải. */}
-          <SampleDownload onDownloaded={onDownloaded} models={models} compact />
+          {/* Khung lớn thì hiện bản đầy đủ (có mô tả model); panel nhỏ mới cần bản gọn */}
+          <SampleDownload onDownloaded={onDownloaded} models={models} compact={only === undefined} />
 
           <div className="flex flex-wrap items-center gap-1">
             <button className="border-edge hover:bg-elevated rounded border px-2 py-1 text-xs" onClick={onPickAnimation}>
@@ -1562,6 +1691,15 @@ function VrmControls({
           ✕ Tắt nhân vật
         </button>
       </div>
+    </div>
+  )
+
+  if (only === 'left') return left
+  if (only === 'right') return right
+  return (
+    <div className="flex flex-col gap-2">
+      {left}
+      {right}
     </div>
   )
 }
@@ -1735,10 +1873,10 @@ function StartScreen({
  * mình đang dùng model tác giả cấm dùng thương mại. `<details>` giữ đúng cân bằng đó, và là thẻ
  * HTML sẵn có nên có bàn phím + đọc màn hình miễn phí.
  */
-function ModelInfo({ model }: { readonly model: VrmModelDto }) {
+function ModelInfo({ model, open }: { readonly model: VrmModelDto; readonly open?: boolean }) {
   const mb = (model.sizeBytes / 1024 / 1024).toFixed(1)
   return (
-    <details className="group">
+    <details className="group" open={open}>
       <summary className="flex cursor-pointer list-none items-center gap-1.5">
         <span className="text-content min-w-0 flex-1 truncate text-xs font-medium" title={model.path}>
           {model.label}
