@@ -3,6 +3,7 @@ import { release } from 'node:os'
 import {
   IPC,
   type AppEventDto,
+  type VrmSampleProgress,
   type FolderSyncEventDto,
   type HttpCheckResultDto,
   type HttpCheckSummaryDto,
@@ -87,7 +88,10 @@ const api: InfraApi = {
     autoStart: () => ipcRenderer.invoke(IPC.TUNNELS_AUTOSTART)
   },
   app: {
-    setTrayPrefs: (prefs) => ipcRenderer.send(IPC.APP_TRAY_PREFS, prefs)
+    setTrayPrefs: (prefs) => ipcRenderer.send(IPC.APP_TRAY_PREFS, prefs),
+    onReloadRequested: (cb) => subscribe<void>(IPC.RELOAD_REQUESTED, cb),
+    confirmReload: () => ipcRenderer.send(IPC.RELOAD_CONFIRMED),
+    setTerminalFocus: (focused) => ipcRenderer.send(IPC.TERMINAL_FOCUS, focused)
   },
   events: {
     list: (query) => ipcRenderer.invoke(IPC.EVENTS_LIST, query),
@@ -368,6 +372,30 @@ const api: InfraApi = {
     add: (name, bytes) => ipcRenderer.invoke(IPC.FONTS_ADD, { name, bytes }),
     rename: (id, family) => ipcRenderer.invoke(IPC.FONTS_RENAME, id, family),
     remove: (id) => ipcRenderer.invoke(IPC.FONTS_REMOVE, id)
+  },
+  vrm: {
+    list: () => ipcRenderer.invoke(IPC.VRM_LIST),
+    pick: () => ipcRenderer.invoke(IPC.VRM_PICK),
+    remove: (id) => ipcRenderer.invoke(IPC.VRM_REMOVE, id),
+    read: (id) => ipcRenderer.invoke(IPC.VRM_READ, id),
+    getSettings: () => ipcRenderer.invoke(IPC.VRM_GET_SETTINGS),
+    setSettings: (patch) => ipcRenderer.invoke(IPC.VRM_SET_SETTINGS, patch),
+    pickAnimation: () => ipcRenderer.invoke(IPC.VRM_PICK_ANIMATION),
+    listOutfits: (modelId) => ipcRenderer.invoke(IPC.VRM_LIST_OUTFITS, modelId),
+    saveOutfit: (modelId, name, hidden) => ipcRenderer.invoke(IPC.VRM_SAVE_OUTFIT, modelId, name, hidden),
+    removeOutfit: (modelId, outfitId) => ipcRenderer.invoke(IPC.VRM_REMOVE_OUTFIT, modelId, outfitId),
+    setWornOutfit: (modelId, outfitId) => ipcRenderer.invoke(IPC.VRM_SET_WORN_OUTFIT, modelId, outfitId),
+    listSamples: () => ipcRenderer.invoke(IPC.VRM_SAMPLE_LIST),
+    downloadSample: (id) => ipcRenderer.invoke(IPC.VRM_SAMPLE_DOWNLOAD, id),
+    cancelSample: () => ipcRenderer.send(IPC.VRM_SAMPLE_CANCEL),
+    onSampleProgress: (cb) => subscribe<VrmSampleProgress>(IPC.VRM_SAMPLE_PROGRESS, cb)
+  },
+  vrmOverlay: {
+    ready: () => ipcRenderer.send(IPC.VRM_OVERLAY_READY),
+    open: () => ipcRenderer.send(IPC.VRM_OVERLAY_OPEN),
+    hold: () => ipcRenderer.send(IPC.VRM_OVERLAY_HOLD),
+    release: () => ipcRenderer.send(IPC.VRM_OVERLAY_RELEASE),
+    onEvent: (cb) => subscribe<AppEventDto>(IPC.VRM_OVERLAY_EVENT, cb)
   },
   ai: {
     getConfig: () => ipcRenderer.invoke(IPC.AI_GET_CONFIG),

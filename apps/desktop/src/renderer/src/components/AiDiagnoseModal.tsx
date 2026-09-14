@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AiDiagnoseRecordDto } from '@infra/shared'
 import { useT } from '../i18n'
 import { formatTime } from '../lib/paths'
@@ -7,7 +7,7 @@ import { useAiDiagnoseStore, type DiagnoseStep } from '../stores/aiDiagnose'
 import { useDataStore } from '../stores/data'
 import { terminalTargetPane, useTabsStore } from '../stores/tabs'
 import type { AiDockPaneSpec } from './AiDock'
-import { Button, Field, Select, TextArea } from './ui'
+import { Button } from './ui'
 import { OpenInTabButton } from './OpenInTabButton'
 
 /**
@@ -63,6 +63,16 @@ export function AiDiagnoseModal({
   const [hostId, setHostId] = useState(activeHostId ?? hosts[0]?.id ?? '')
   const [symptom, setSymptom] = useState('')
 
+  // Ô nhập tự cao theo nội dung — bằng JS, cùng lý do ở `CodexPanel`: `field-sizing: content`
+  // báo hỗ trợ nhưng đo thật thì ô cao 0px ở Electron này. Đặt `auto` trước rồi mới đọc `scrollHeight`.
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [symptom])
+
   const begin = (): void => {
     const host = hosts.find((h) => h.id === hostId)
     if (!host || !symptom.trim()) return
@@ -113,32 +123,65 @@ export function AiDiagnoseModal({
    */
   const composer = wrap(
     !session ? (
-      <>
-        <Field label={t('ai.diagnose.hostLabel')}>
-          <Select value={hostId} onChange={(e) => setHostId(e.target.value)}>
+      /**
+       * MỘT khung liền như hai tab kia (Trợ lý · Codex): triệu chứng ở trên, hàng dưới là máy chủ
+       * bên trái (chỗ Codex đặt model) và nút bắt đầu tròn bên phải. Ba tab cạnh nhau trong một
+       * cột mà ô nhập mỗi tab một kiểu thì trông như ba app dán vào nhau.
+       */
+      <div className="border-edge-strong bg-input focus-within:border-accent rounded-xl border px-2.5 pt-2 pb-1.5 transition-colors">
+        <textarea
+          ref={inputRef}
+          autoFocus
+          value={symptom}
+          placeholder={t('ai.diagnose.symptomPlaceholder')}
+          aria-label={t('ai.diagnose.symptomLabel')}
+          onChange={(e) => setSymptom(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter BẮT ĐẦU, Shift+Enter xuống dòng — cùng khuôn với Trợ lý AI và Codex
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+              // Đang gõ tiếng Việt/Nhật bằng IME: Enter là để CHỌN chữ, không phải gửi
+              if (e.nativeEvent.isComposing) return
+              e.preventDefault()
+              begin()
+              return
+            }
+            if (e.key === 'Escape' && symptom !== '') {
+              e.stopPropagation()
+              setSymptom('')
+            }
+          }}
+          className="text-content placeholder:text-subtle max-h-40 min-h-[3.25rem] w-full resize-none border-0 bg-transparent text-sm outline-none"
+        />
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {/* Máy chủ sẽ bị chạy lệnh chẩn đoán — tô accent như mức suy luận của Codex: đây là thứ
+              phải đọc chắc trước khi bấm, không phải phụ kiện. `<select>` trần, không viền: đã
+              nằm trong khung nhập, thêm hộp viền nữa là hộp trong hộp. */}
+          <select
+            value={hostId}
+            onChange={(e) => setHostId(e.target.value)}
+            title={t('ai.diagnose.hostLabel')}
+            aria-label={t('ai.diagnose.hostLabel')}
+            className="text-accent-fg hover:bg-hover hover:text-content min-w-0 cursor-pointer appearance-none truncate rounded border-0 bg-transparent py-0.5 pr-1 pl-1 text-[11px] font-medium outline-none"
+          >
             {hosts.length === 0 && <option value="">{t('ai.diagnose.noHosts')}</option>}
             {hosts.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.label}
               </option>
             ))}
-          </Select>
-        </Field>
-        <Field label={t('ai.diagnose.symptomLabel')}>
-          <TextArea
-            rows={3}
-            autoFocus
-            value={symptom}
-            placeholder={t('ai.diagnose.symptomPlaceholder')}
-            onChange={(e) => setSymptom(e.target.value)}
-          />
-        </Field>
-        <div className="flex justify-end">
-          <Button variant="primary" disabled={!hostId || !symptom.trim()} onClick={begin}>
-            {t('ai.diagnose.start')}
-          </Button>
+          </select>
+          {/* Nút TRÒN như hai tab kia; tên đầy đủ "Bắt đầu chẩn đoán" ở tooltip. */}
+          <button
+            onClick={begin}
+            disabled={!hostId || !symptom.trim()}
+            title={t('ai.diagnose.start')}
+            aria-label={t('ai.diagnose.start')}
+            className="bg-accent hover:bg-accent-hover flex size-7 shrink-0 items-center justify-center rounded-full text-sm leading-none text-white transition-colors disabled:opacity-30"
+          >
+            ↑
+          </button>
         </div>
-      </>
+      </div>
     ) : (
       <SessionActions onApprove={() => void approve()} onSkip={() => void skip()} onStop={stop} onNew={reset} />
     ),
@@ -158,11 +201,9 @@ export function AiDiagnoseModal({
     id: 'ai-diagnose',
     icon: '🩺',
     title: t('ai.diagnose.title'),
-    // ✕ = cất dock đi. KHÔNG dừng phiên đang chạy: nửa chừng một chuỗi chẩn đoán mà bấm ✕ rồi
-    // mất luôn kết quả các bước trước là thứ không ai muốn. Phiên còn sống thì pill hiện lên
-    // và vẫn báo "đang chờ bạn duyệt"; muốn dừng thật thì có nút Dừng trong phiên.
-    onClose: () => onClose?.(),
-    closeHint: t('ai.diagnose.minimizeHint'),
+    // ✕ là của CẢ cột (`AiDockShell`) và chỉ cất dock đi, KHÔNG dừng phiên đang chạy: nửa chừng
+    // một chuỗi chẩn đoán mà mất luôn kết quả các bước trước là thứ không ai muốn. Phiên còn sống
+    // thì pill hiện lên và vẫn báo "đang chờ bạn duyệt"; muốn dừng thật thì có nút Dừng trong phiên.
     headerExtra: <OpenInTabButton kind="ai-diagnose" onDone={onClose} compact />,
     footer: composer,
     children: body,

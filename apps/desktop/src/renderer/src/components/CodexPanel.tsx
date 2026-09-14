@@ -266,7 +266,6 @@ export function CodexPanel({
       id: 'codex',
       icon: '🤖',
       title: t('codex.title'),
-      onClose: () => onClose?.(),
       // ⛶ mở sang TAB — cột hẹp đọc diff rất mệt, đó là lý do tab là chế độ chính.
       headerExtra: <OpenInTabButton kind="codex" onDone={onClose} compact />,
       footer: composer,

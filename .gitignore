@@ -22,3 +22,4 @@ CLAUDE.md
 # esbuild rồi chụp bằng Electron `capturePage` — xem CLAUDE.md §7. Sản phẩm của việc đó là
 # file tạm, không phải mã nguồn.
 apps/desktop/shot/
+apps/desktop/_harness/

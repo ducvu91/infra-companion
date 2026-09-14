@@ -463,7 +463,56 @@ export const IPC = {
   CMDHIST_CLEAR: 'cmd-history:clear',
   /** Xuất ra file JSON — lịch sử KHÔNG đi qua sync, đây là đường mang sang máy khác. */
   CMDHIST_EXPORT: 'cmd-history:export',
-  CMDHIST_IMPORT: 'cmd-history:import'
+  CMDHIST_IMPORT: 'cmd-history:import',
+
+  // ── F70: nhân vật VRM (model 3D trong máy user) ──────────────────────────
+  /** Mở hộp chọn file `.vrm`, kiểm định dạng, trả metadata — CHƯA nạp bytes. */
+  VRM_PICK: 'vrm:pick',
+  /** Danh sách model đã thêm (đường dẫn + metadata), kèm cờ file còn tồn tại hay không. */
+  VRM_LIST: 'vrm:list',
+  VRM_REMOVE: 'vrm:remove',
+  /** Đọc trọn bytes của một model để renderer dựng scene. Tách khỏi LIST vì đây là hàng chục MB. */
+  VRM_READ: 'vrm:read',
+  VRM_GET_SETTINGS: 'vrm:get-settings',
+  VRM_SET_SETTINGS: 'vrm:set-settings',
+  /** Chọn file animation `.vrma` và đọc luôn bytes — file nhỏ (vài trăm KB), không cần 2 lượt. */
+  VRM_PICK_ANIMATION: 'vrm:pick-animation',
+  /** Bộ trang phục user tự lưu cho một model — file riêng `vrm-outfits.json`. */
+  VRM_LIST_OUTFITS: 'vrm:list-outfits',
+  VRM_SAVE_OUTFIT: 'vrm:save-outfit',
+  VRM_REMOVE_OUTFIT: 'vrm:remove-outfit',
+  /** Nhớ bộ đang mặc — hiện/ẩn mesh chỉ sống trong renderer, không nhớ thì mở lại app là mất. */
+  VRM_SET_WORN_OUTFIT: 'vrm:set-worn-outfit',
+  /**
+   * Cửa sổ nhân vật NGOÀI desktop khi app đang ở khay / thu nhỏ mà có thông báo (`main/overlay.ts`).
+   * READY: renderer dựng xong model. EVENT: main → overlay, một thông báo cần nói. OPEN: user bấm
+   * vào nhân vật → hiện lại cửa sổ chính. HOLD/RELEASE: chuột đang trên nhân vật → khoan ẩn.
+   */
+  /**
+   * Model MẪU tải theo yêu cầu — app không nhúng sẵn model 14 MB vào bản cài của mọi người.
+   * LIST: danh sách model mẫu · DOWNLOAD: tải + kiểm sha256 + thêm vào danh bạ ·
+   * PROGRESS: main → renderer, tiến độ · CANCEL: huỷ lượt đang tải.
+   */
+  VRM_SAMPLE_LIST: 'vrm:sample-list',
+  VRM_SAMPLE_DOWNLOAD: 'vrm:sample-download',
+  VRM_SAMPLE_PROGRESS: 'vrm:sample-progress',
+  VRM_SAMPLE_CANCEL: 'vrm:sample-cancel',
+  VRM_OVERLAY_READY: 'vrm:overlay-ready',
+  VRM_OVERLAY_EVENT: 'vrm:overlay-event',
+  VRM_OVERLAY_OPEN: 'vrm:overlay-open',
+  VRM_OVERLAY_HOLD: 'vrm:overlay-hold',
+  VRM_OVERLAY_RELEASE: 'vrm:overlay-release',
+  /** Main → renderer: user vừa bấm Ctrl+R / F5. Renderer hỏi lại rồi mới cho nạp lại. */
+  RELOAD_REQUESTED: 'app:reload-requested',
+  /** Renderer → main: user đã đồng ý, nạp lại thật. Không đi qua phím nên guard không bắt lại. */
+  RELOAD_CONFIRMED: 'app:reload-confirmed',
+  /**
+   * Renderer → main: con trỏ có đang ở trong terminal không.
+   *
+   * Để guard Ctrl+R nhường phím cho `reverse-i-search` của shell. Main không hỏi focus đồng bộ
+   * được, mà `before-input-event` phải quyết ngay, nên phải giữ sẵn trạng thái.
+   */
+  TERMINAL_FOCUS: 'app:terminal-focus'
 } as const
 
 export type IpcChannel = (typeof IPC)[keyof typeof IPC]

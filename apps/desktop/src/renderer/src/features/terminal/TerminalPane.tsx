@@ -243,6 +243,17 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
     })
 
     term.open(host)
+
+    /**
+     * Báo main khi con trỏ vào/rời terminal, để Ctrl+R được nhường cho `reverse-i-search`.
+     *
+     * `focusin`/`focusout` chứ không phải `focus`/`blur`: xterm nhận phím qua một `<textarea>`
+     * ẩn bên trong, nên sự kiện xảy ra ở phần tử con — `focus` không nổi bọt, `focusin` thì có.
+     */
+    const onFocusIn = (): void => window.infra.app.setTerminalFocus(true)
+    const onFocusOut = (): void => window.infra.app.setTerminalFocus(false)
+    host.addEventListener('focusin', onFocusIn)
+    host.addEventListener('focusout', onFocusOut)
     // Renderer: WebglAddon nạp/gỡ ở effect riêng theo setting termWebgl (GPU mượt hơn hẳn
     // DOM renderer khi gõ/cuộn). Vụ "khung đen" WebGL cache nền khi đổi theme ngày trước
     // được xử lý bằng clearTextureAtlas() trong effect đổi theme. Gỡ addon = tự về DOM renderer.
@@ -458,6 +469,11 @@ export function TerminalPane({ tabId, pane, paneActive, tabVisible, slot }: Term
       cursorMoveDisposable.dispose()
       if (suggestRafRef.current !== null) cancelAnimationFrame(suggestRafRef.current)
       resizeObserver.disconnect()
+      host.removeEventListener('focusin', onFocusIn)
+      host.removeEventListener('focusout', onFocusOut)
+      // Pane bị gỡ lúc đang giữ focus thì main còn nhớ `true` mãi, và Ctrl+R sẽ im lặng không
+      // hỏi ở mọi nơi khác trong app
+      window.infra.app.setTerminalFocus(false)
       mouseEl?.removeEventListener('paste', onNativePaste, true)
       mouseEl?.removeEventListener('mousedown', onMouseDown, true)
       mouseEl?.removeEventListener('mouseup', onMouseUp, true)

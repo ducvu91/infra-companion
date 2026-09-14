@@ -5,6 +5,30 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.0] — 2026-09-14
+
+### Added
+
+- **A 3D character stands beside your work and tells you when something breaks.** Load any `.vrm` model from your machine and it appears as a small figure next to the terminal — it follows your cursor with its eyes and head, blinks, breathes, shifts its weight, and reacts when you click it. When a monitoring threshold trips, replication falls behind or a URL check fails, it changes expression, holds a worried posture for a few seconds and says what happened in a speech bubble above its head. The app **never downloads a model on its own and keeps no copy** — it remembers the path to your file, shows the author and licence the model itself declares, and tells you plainly when a file has moved rather than failing at the moment you click it.
+- **No model of your own? Download one in a click.** A CC0 character by pixiv (Sendagaya Shino) can be fetched from inside the app, checksum-verified and ready to use. It is **not bundled into the installer** — 14 MB would ship to everyone including the majority who never turn the character on — and it is served from this project's own release rather than a third-party page, because upstream links rot and a domain you do not control is a domain that can serve you something else. A file that arrives with the wrong checksum is discarded and the reason said out loud.
+- **It keeps working when the app is in the tray.** Minimise to the tray and an alert still reaches you: the character appears in the corner of your desktop, in a transparent frameless window that **does not steal focus** from whatever you are typing in, says what happened, and fades away after fifteen seconds — or stays as long as your cursor is on it. Click it and the app comes back.
+- **Ask the AI assistant without leaving the character.** Press and hold the character to open a chat bubble over its head, backed by the same assistant the rest of the app uses. Say "open tunnels" or "mở cài đặt" and it opens that tool for you — matched by keyword rather than sent to the model, so it works before you have configured AI at all and cannot be talked into opening the wrong thing. Vietnamese with diacritics is matched properly, which JavaScript's own word boundaries silently fail to do.
+- **Right-click for a radial menu**: expressions, outfits, a ring of your pinned Dashboard tools, model switching and settings, arranged around the character rather than in a list. Outfits are combinations of visible meshes that **you** save and name, because a VRM file carries no notion of an outfit — measured on real models, there is only a pile of separate meshes, machine-generated names, or everything merged into one.
+- **It teaches you its own hidden gestures.** Every way of interacting with the character is invisible — press-and-hold, right-click, Shift-drag, Ctrl-scroll — so occasionally it mentions one in its own voice, only the ones you have not discovered yet, and goes quiet once you know them all.
+
+### Changed
+
+- **The AI column always shows all three tabs.** Assistant, Diagnose and Codex are present whether or not they are open, and clicking a closed one opens it — previously the tab bar appeared and disappeared depending on what was running, so you could not tell the other two existed. **✕** now closes the whole column; running Codex and diagnosis sessions keep going, as they always did.
+- **The Diagnose and Assistant composers match Codex.** One rounded frame, an input that grows with what you type, the target host or question type on the left and a circular send button on the right. `Enter` sends, `Shift+Enter` starts a new line, and an IME composing Vietnamese is left alone.
+- **Ctrl+R asks before it reloads.** Reloading closes every open terminal — SSH sessions, running commands, no undo. The app now asks first, and leaves `Ctrl+R` alone entirely while your cursor is in a terminal, where it belongs to the remote shell's reverse search. This also fixes `Ctrl+R` silently reloading the app, which came from Electron's default menu intercepting the key before the page ever saw it.
+
+### Fixed
+
+- **Models with many vertices made the app stutter.** Dragging or rotating a detailed character was unusably jerky, and it looked like the model's fault. It was not: the hit test used a ray cast against every triangle of the mesh, measured at **277 ms per call** on a 921k-vertex model — a quarter of a second of frozen UI on each mouse event. It now uses a bounding box built from the skeleton, at **under a millisecond for two hundred calls**.
+- **The character's arms move like arms.** Resting pose, elbows and wrists are solved with inverse kinematics against a target beside the hip rather than by stacking rotations, so the whole chain adapts to each model's proportions instead of being tuned for one skeleton. Elbows drift continuously instead of locking in one spot, arms lead and trail as the body turns, and they sway with inertia when you rotate the character. Being tugged now moves the **whole** body — hips, knees and all — instead of bending at the waist while the feet stay nailed down.
+
+---
+
 ## [0.3.0] — 2026-09-11
 
 ### Added

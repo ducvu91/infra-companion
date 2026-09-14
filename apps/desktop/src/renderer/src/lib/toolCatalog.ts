@@ -144,6 +144,8 @@ export const TOOLS: readonly ToolEntry[] = [
    */
   { id: 'codex', menuKey: 'menu.codex', descKey: 'features.dCodex', category: 'app', modal: 'codex-dock', common: false },
   { id: 'plugins', menuKey: 'menu.plugins', descKey: 'features.dPlugins', category: 'app', modal: 'plugins', common: false },
+  // F70 — nhân vật VRM: panel nổi, `setModal('vrm')` chuyển sang cờ `vrmPanelOpen`
+  { id: 'vrm', menuKey: 'menu.vrm', descKey: 'features.dVrm', category: 'app', modal: 'vrm', common: false },
   // `common: false` cho Cài đặt / Trợ giúp KHÔNG có nghĩa là ẩn chúng khỏi menu: hai mục này
   // được vẽ tay ở CUỐI menu (sau separator) theo lệ chung của mọi app. Đặt `true` ở đây là ra
   // hai lần trong cùng một menu — đã dính đúng vậy.

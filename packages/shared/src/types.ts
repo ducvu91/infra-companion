@@ -2057,6 +2057,21 @@ export interface InfraApi {
   app: {
     /** F53 — báo main tuỳ chọn khay hệ thống (đóng-về-khay, ngôn ngữ menu khay). */
     setTrayPrefs(prefs: TrayPrefsDto): void
+    /**
+     * User vừa bấm Ctrl+R / F5. Phím đã bị chặn ở main; renderer hỏi lại rồi quyết định.
+     *
+     * Nạp lại đóng sạch mọi tab terminal đang mở — mất phiên SSH và lệnh đang chạy dở, không
+     * hoàn tác được.
+     */
+    onReloadRequested(cb: () => void): () => void
+    /** User đã đồng ý nạp lại. */
+    confirmReload(): void
+    /**
+     * Báo main con trỏ có đang ở trong terminal không.
+     *
+     * Để Ctrl+R trong terminal đi thẳng xuống shell (`reverse-i-search`) thay vì bị hỏi nạp lại.
+     */
+    setTerminalFocus(focused: boolean): void
   }
   /** Trung tâm thông báo + đánh dấu sự kiện — mọi hệ theo dõi trong main ghi vào cùng một kho. */
   events: {
@@ -2557,6 +2572,55 @@ export interface InfraApi {
     add(name: string, bytes: Uint8Array): Promise<FontAddResultDto>
     rename(id: string, family: string): Promise<boolean>
     remove(id: string): Promise<boolean>
+  }
+  /**
+   * F70 — nhân vật VRM (mức 1: model nằm trong máy user).
+   * `read` trả bytes thô chứ không data URL: một model là 40–60 MB.
+   */
+  vrm: {
+    list(): Promise<import('./vrm').VrmModelDto[]>
+    /** Mở hộp chọn file, kiểm định dạng bằng 2 MB đầu, thêm vào danh bạ. */
+    pick(): Promise<import('./vrm').VrmPickResult>
+    /** Bỏ khỏi danh bạ. KHÔNG xoá file gốc của user. */
+    remove(id: string): Promise<boolean>
+    read(id: string): Promise<import('./vrm').VrmReadResult>
+    getSettings(): Promise<import('./vrm').VrmSettingsDto>
+    setSettings(patch: Partial<import('./vrm').VrmSettingsDto>): Promise<import('./vrm').VrmSettingsDto>
+    /** Chọn file `.vrma` và trả luôn bytes — file animation nhỏ nên không cần tách 2 lượt. */
+    pickAnimation(): Promise<import('./vrm').VrmAnimationPickResult>
+    /**
+     * Bộ trang phục **do user tự đặt** cho một model.
+     *
+     * File VRM không mang thông tin bộ nào cả (đo thật: model chỉ có các mesh rời như
+     * `Dress`/`Sleeve`/`Socks`, hoặc gộp hết vào một mesh), nên bộ ở đây là tổ hợp bật/tắt mà
+     * user tự lưu lại dưới một cái tên.
+     */
+    listOutfits(modelId: string): Promise<import('./vrmOutfit').VrmOutfitsResult>
+    /** Lưu tổ hợp hiện tại; trùng tên thì ghi đè. Trả về danh sách sau khi lưu. */
+    saveOutfit(modelId: string, name: string, hidden: string[]): Promise<import('./vrmOutfit').VrmOutfitsResult>
+    removeOutfit(modelId: string, outfitId: string): Promise<import('./vrmOutfit').VrmOutfitsResult>
+    /** Nhớ bộ đang mặc để lần mở app sau còn khoác lại; `null` = không mặc bộ nào. */
+    setWornOutfit(modelId: string, outfitId: string | null): Promise<void>
+    /** Model mẫu tải được (giấy phép cho phân phối lại) — app không nhúng sẵn để bản cài nhẹ. */
+    listSamples(): Promise<import('./vrmSample').VrmSampleModel[]>
+    /** Tải một model mẫu, kiểm sha256, thêm vào danh bạ và chọn luôn. */
+    downloadSample(id: string): Promise<import('./vrmSample').VrmSampleResult>
+    cancelSample(): void
+    onSampleProgress(cb: (p: import('./vrmSample').VrmSampleProgress) => void): () => void
+  }
+  /**
+   * Cửa sổ nhân vật NGOÀI desktop (app đang ở khay / thu nhỏ). Chỉ renderer route `#vrm-overlay`
+   * dùng; main quyết định hiện/ẩn, renderer chỉ dựng model và nói.
+   */
+  vrmOverlay: {
+    /** Model dựng xong — từ đây main mới gửi thông báo và cho cửa sổ hiện. */
+    ready(): void
+    /** User bấm vào nhân vật: hiện lại cửa sổ chính, ẩn overlay. */
+    open(): void
+    /** Chuột đang trên nhân vật → main khoan ẩn; rời ra → đếm lại. */
+    hold(): void
+    release(): void
+    onEvent(cb: (ev: AppEventDto) => void): () => void
   }
   ai: {
     getConfig(): Promise<AiConfigDto | null>

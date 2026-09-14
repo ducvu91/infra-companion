@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { AiConfigDto, AiModeDto, AiProviderDto } from '@infra/shared'
 import { useT } from '../i18n'
 import { MiniMarkdown } from '../lib/miniMarkdown'
@@ -6,7 +6,7 @@ import { terminalTargetPane, useTabsStore } from '../stores/tabs'
 import { errorMessage, useToastsStore } from '../stores/toasts'
 import type { AiDockPaneSpec } from './AiDock'
 import { OpenInTabButton } from './OpenInTabButton'
-import { Button, Field, Modal, Select, TextArea, TextInput } from './ui'
+import { Button, Field, Modal, Select, TextInput } from './ui'
 
 const MODEL_HINT: Record<AiProviderDto, string> = {
   claude: 'claude-opus-4-8',
@@ -46,9 +46,16 @@ export function AiModal({
   onClose,
   embedded,
   renderSpec,
+  onCollapseToCharacter,
 }: {
   onClose?: () => void
   embedded?: boolean
+  /**
+   * Có = hiện nút "thu về nhân vật" (💬) trên hàng tab của dock: đóng cột, mở lại bong bóng chat
+   * trên đầu nhân vật VRM — đường ngược của nút ⛶ trong bong bóng. Dock chỉ truyền khi nhân vật
+   * đang hiện; không có nhân vật thì không có nút, không mời user về một chỗ không tồn tại.
+   */
+  onCollapseToCharacter?: () => void
   /**
    * Chế độ dock: thay vì tự vẽ cột, panel đưa spec của mình lên `AiDockShell` để hai công cụ AI
    * dùng chung một cột + thanh tab. Là hàm chứ không phải `<AiDock>` bọc ngoài vì shell phải biết
@@ -179,66 +186,98 @@ export function AiModal({
   )
 
   /**
-   * Khe ĐÁY (`footer` của `AiDock`): chọn chế độ · ô nhập · máy đích · nút Hỏi.
+   * Ô nhập tự cao theo nội dung — bằng JS, cùng lý do ở `CodexPanel`: `field-sizing: content` báo
+   * là hỗ trợ nhưng đo thật thì ô cao 0px ở Electron này. Đặt `auto` trước rồi mới đọc
+   * `scrollHeight`, không thì xoá bớt chữ mà ô vẫn cao như cũ.
+   */
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+  }, [input])
+
+  /**
+   * Khe ĐÁY (`footer` của `AiDock`): MỘT khung liền như tab Codex — ô nhập ở trên, hàng điều
+   * khiển ở dưới (kiểu câu hỏi bên trái · nút gửi tròn bên phải), máy đích thành dòng nhỏ dưới
+   * khung, đúng chỗ Codex để cwd.
    *
-   * Trước đây cả khối này nằm TRÊN câu trả lời trong cùng một vùng cuộn, nên trả lời càng dài thì
-   * ô nhập càng bị đẩy lên khỏi tầm nhìn — hỏi tiếp là phải cuộn đi tìm chỗ gõ. Nay neo ở đáy như
-   * mọi khung chat: câu trả lời chảy phía trên, chỗ gõ đứng yên một chỗ.
+   * Cùng khuôn với Codex là chủ ý: hai tab cạnh nhau trong một cột mà ô nhập mỗi tab một kiểu
+   * (bên này ba chip + nút to, bên kia khung bo tròn + mũi tên) thì trông như hai app dán vào
+   * nhau. Neo ở đáy như mọi khung chat: câu trả lời chảy phía trên, chỗ gõ đứng yên một chỗ.
    */
   const composer = (
     <>
-      <div className="mb-2 flex flex-wrap gap-1.5">
-        {(['generate', 'explain', 'explain-error'] as AiModeDto[]).map((m) => (
-          <button
-            key={m}
-            className={`rounded border px-2 py-1 text-xs ${
-              mode === m
-                ? 'border-accent bg-accent-hover/15 text-accent-fg'
-                : 'border-edge-strong text-muted hover:bg-hover'
-            }`}
-            onClick={() => setMode(m)}
+      <div className="border-edge-strong bg-input focus-within:border-accent rounded-xl border px-2.5 pt-2 pb-1.5 transition-colors">
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter GỬI, Shift+Enter xuống dòng — như Codex và mọi khung chat; Ctrl+Enter vẫn gửi
+            if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
+              // Đang gõ tiếng Việt/Nhật bằng IME: Enter là để CHỌN chữ, không phải gửi
+              if (e.nativeEvent.isComposing) return
+              e.preventDefault()
+              void ask()
+              return
+            }
+            // Esc thuộc terminal ở panel này (không backdrop) — nhưng trong ô nhập thì Esc xoá
+            // nội dung đang gõ là phản xạ quen, và chặn lan để Esc không đóng thứ khác.
+            if (e.key === 'Escape' && input !== '') {
+              e.stopPropagation()
+              setInput('')
+            }
+          }}
+          placeholder={
+            mode === 'generate' ? t('ai.phGenerate') : mode === 'explain' ? t('ai.phExplain') : t('ai.phError')
+          }
+          className="text-content placeholder:text-subtle max-h-40 min-h-[3.25rem] w-full resize-none border-0 bg-transparent text-sm outline-none"
+        />
+
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {/* Kiểu câu hỏi đứng đúng chỗ Codex đặt model: `<select>` trần, không viền — nó đã nằm
+              trong khung nhập, thêm hộp viền nữa là hộp trong hộp. Vẫn là <select> thật để có bàn
+              phím và menu hệ điều hành miễn phí. */}
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value as AiModeDto)}
+            title={t('ai.modeLabel')}
+            aria-label={t('ai.modeLabel')}
+            className="text-accent-fg hover:bg-hover hover:text-content min-w-0 cursor-pointer appearance-none truncate rounded border-0 bg-transparent py-0.5 pr-1 pl-1 text-[11px] font-medium outline-none"
           >
-            {m === 'generate' ? t('ai.modeGenerate') : m === 'explain' ? t('ai.modeExplain') : t('ai.modeError')}
+            <option value="generate">{t('ai.modeGenerate')}</option>
+            <option value="explain">{t('ai.modeExplain')}</option>
+            <option value="explain-error">{t('ai.modeError')}</option>
+          </select>
+          {/* Nút gửi TRÒN, chỉ mũi tên — như Codex; ở cột 400px thì "Hỏi AI (Ctrl+Enter)" chiếm
+              gần nửa hàng cho một việc phím Enter đã làm. Nhãn đầy đủ ở tooltip. */}
+          <button
+            onClick={() => void ask()}
+            disabled={busy || !input.trim()}
+            title={busy ? t('ai.asking') : t('ai.sendHint')}
+            aria-label={t('ai.ask')}
+            className="bg-accent hover:bg-accent-hover flex size-7 shrink-0 items-center justify-center rounded-full text-sm leading-none text-white transition-colors disabled:opacity-30"
+          >
+            {busy ? '…' : '↑'}
           </button>
-        ))}
+        </div>
       </div>
 
-      <TextArea
-        rows={3}
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void ask()
-          // Esc thuộc terminal ở panel này (không backdrop) — nhưng trong ô nhập thì Esc xoá
-          // nội dung đang gõ là phản xạ quen, và chặn lan để Esc không đóng thứ khác.
-          if (e.key === 'Escape' && input !== '') {
-            e.stopPropagation()
-            setInput('')
-          }
-        }}
-        placeholder={
-          mode === 'generate' ? t('ai.phGenerate') : mode === 'explain' ? t('ai.phExplain') : t('ai.phError')
-        }
-      />
-      <div className="mt-2 flex items-center justify-between gap-2">
-        {/* Lệnh sẽ đi tới máy NÀO — panel sống song song và người ta đổi tab liên tục, nên đây
-            là thứ phải đọc chắc trước khi bấm chèn. Cố ý KHÔNG dùng `text-subtle text-[10px]`
-            như một dòng ghi chú: chụp thử thì nó mờ đến mức mắt bỏ qua, mà bỏ qua dòng này là
-            chèn lệnh vào máy khác. Tên máy tô sáng, "Chèn vào:" thì nhạt. */}
-        <span className="min-w-0 truncate text-[11px]">
-          {activePane ? (
-            <>
-              <span className="text-subtle">{t('ai.targetLabel')} </span>
-              <span className="text-content font-medium">{activePane.subtitle ?? activePane.title}</span>
-            </>
-          ) : (
-            <span className="text-warning">{t('ai.noTarget')}</span>
-          )}
-        </span>
-        <Button variant="primary" disabled={busy || !input.trim()} onClick={() => void ask()}>
-          {busy ? t('ai.asking') : t('ai.ask')}
-        </Button>
-      </div>
+      {/* Lệnh sẽ đi tới máy NÀO — dưới khung như dòng cwd của Codex, nhưng KHÔNG mờ kiểu ghi chú
+          10px: panel sống song song và người ta đổi tab liên tục, chụp thử thì dòng mờ bị mắt bỏ
+          qua, mà bỏ qua dòng này là chèn lệnh vào máy khác. Tên máy tô sáng, "Chèn vào:" thì nhạt. */}
+      <p className="mt-1 truncate text-[11px]">
+        {activePane ? (
+          <>
+            <span className="text-subtle">{t('ai.targetLabel')} </span>
+            <span className="text-content font-medium">{activePane.subtitle ?? activePane.title}</span>
+          </>
+        ) : (
+          <span className="text-warning">{t('ai.noTarget')}</span>
+        )}
+      </p>
     </>
   )
 
@@ -278,9 +317,19 @@ export function AiModal({
     id: 'ai',
     icon: '✨',
     title: t('ai.title'),
-    onClose: () => onClose?.(),
     headerExtra: (
       <>
+        {/* 💬 = thu về bong bóng trên đầu nhân vật — đường ngược của ⛶ trong bong bóng. */}
+        {onCollapseToCharacter && (
+          <button
+            className="text-subtle hover:bg-hover hover:text-content shrink-0 rounded px-1 py-0.5 text-sm leading-none"
+            title={t('ai.collapseToCharacter')}
+            aria-label={t('ai.collapseToCharacter')}
+            onClick={onCollapseToCharacter}
+          >
+            💬
+          </button>
+        )}
         {/* ⛶ = phóng to thành TAB. Đóng dock ngay sau đó: để cả hai cùng mở thì có hai màn hình
             AI với hai state khác nhau, và user không biết mình đang gõ vào cái nào. */}
         <OpenInTabButton kind="ai" onDone={onClose} compact />

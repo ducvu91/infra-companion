@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu, nativeImage, shell } from 'electron'
 import { join } from 'node:path'
 import { IPC } from '@infra/shared'
 import { registerUpdaterIpc } from './ipc/updater'
@@ -31,6 +31,7 @@ import { registerNetToolsIpc } from './ipc/nettools'
 import { flushSyncOnQuit, registerSyncIpc } from './ipc/sync'
 import { registerPromptIpc, setPromptVisibilityHook } from './ipc/prompts'
 import { createTray, notifyHiddenOnce, shouldHideOnClose } from './tray'
+import { destroyOverlay, hideOverlay, initOverlay } from './overlay'
 import { registerSftpIpc } from './ipc/sftp'
 import { registerVncIpc } from './ipc/vnc'
 import { registerRdpIpc } from './ipc/rdp'
@@ -39,6 +40,7 @@ import { registerTunnelsIpc } from './ipc/tunnels'
 import { registerLocalDevIpc } from './ipc/localdev'
 import { registerHostMapIpc } from './ipc/hostmap'
 import { registerFontsIpc } from './ipc/fonts'
+import { registerVrmIpc } from './ipc/vrm'
 import { registerHelpIpc } from './ipc/help'
 import { registerPluginsIpc } from './ipc/plugins'
 import { registerMarketplaceIpc } from './ipc/marketplace'
@@ -83,6 +85,14 @@ function showMainWindow(): void {
   win.focus()
 }
 
+/**
+ * Con trỏ có đang ở trong một terminal không — renderer đẩy lên mỗi lần đổi focus.
+ *
+ * Main không hỏi được focus một cách đồng bộ, mà `before-input-event` thì phải quyết định ngay
+ * lúc đó, nên phải giữ sẵn trạng thái ở đây.
+ */
+let terminalFocused = false
+
 function createWindow(): BrowserWindow {
   const iconPath = windowIconPath()
   const win = new BrowserWindow({
@@ -121,6 +131,44 @@ function createWindow(): BrowserWindow {
   // Chặn điều hướng cửa sổ chính ra URL ngoài (chỉ cho reload cùng URL của app)
   win.webContents.on('will-navigate', (event, url) => {
     if (url !== win.webContents.getURL()) event.preventDefault()
+  })
+
+  /**
+   * Hỏi lại trước khi nạp lại cửa sổ bằng phím tắt — và **trả Ctrl+R về cho terminal**.
+   *
+   * Nạp lại đóng sạch mọi tab terminal đang mở: mất phiên SSH, mất lệnh đang chạy dở, không có
+   * đường hoàn tác. Lỡ tay một lần là mất cả buổi làm việc.
+   *
+   * ⚠️ Trước đây Ctrl+R **im lặng nạp lại ngay cả khi đang gõ trong terminal**, làm mất
+   * `reverse-i-search` của bash. Nguyên nhân không nằm trong code này: Electron tự cài menu mặc
+   * định có `View → Reload` gắn `CmdOrCtrl+R`, và accelerator của menu chạy TRƯỚC khi trang thấy
+   * phím (đã kiểm bằng `Menu.getApplicationMenu()` — có thật hai mục Reload / Force Reload).
+   * Phải `setApplicationMenu(null)` thì `before-input-event` mới nhận được phím.
+   *
+   * `before-input-event` chỉ bắt **phím gõ từ bàn phím**: reload do app tự gọi (cập nhật, khôi
+   * phục lỗi) đi đường khác và không bị hỏi. Lượt nạp lại sau khi user đồng ý cũng chạy qua
+   * `webContents.reload()` từ main nên không bị hỏi vòng hai.
+   */
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const ctrl = input.control || input.meta
+    const key = input.key.toLowerCase()
+
+    /**
+     * ⚠️ **Ctrl+Shift+R KHÔNG được đụng vào** — renderer đã dùng nó cho lịch sử lệnh, và nó tự
+     * `preventDefault` để chặn hard-reload của Chromium. Chặn ở main là cướp phím trước khi
+     * renderer kịp thấy, làm hỏng một tính năng đang chạy.
+     */
+    if (input.shift) return
+
+    // Ctrl+R khi con trỏ đang ở terminal là `reverse-i-search` của shell từ xa — để nguyên cho
+    // nó đi xuống pty.
+    if (key === 'r' && ctrl && terminalFocused) return
+
+    const isReload = (key === 'r' && ctrl) || input.key === 'F5'
+    if (!isReload) return
+    event.preventDefault()
+    win.webContents.send(IPC.RELOAD_REQUESTED)
   })
 
   loadRenderer(win)
@@ -255,6 +303,14 @@ function registerDetachedMonitorIpc(): void {
 
   ipcMain.handle(IPC.TUNNELS_OPEN_DETACHED, () => openDetachedTunnels())
   ipcMain.on(IPC.TUNNELS_CLOSE_DETACHED, () => detachedTunnelsWin?.close())
+
+  // User đã xác nhận ở hộp cảnh báo → nạp lại thật. Đi từ main nên `before-input-event`
+  // (chỉ bắt phím gõ) không chặn lại lần này.
+  ipcMain.on(IPC.RELOAD_CONFIRMED, (e) => e.sender.reload())
+
+  ipcMain.on(IPC.TERMINAL_FOCUS, (_e, focused: boolean) => {
+    terminalFocused = focused === true
+  })
 }
 
 // AUMID custom: (1) bản đóng gói cần khớp appId đã cài để Windows toast (alert F04) hoạt động;
@@ -308,9 +364,24 @@ const localDev = registerLocalDevIpc()
 registerHostMapIpc()
 registerHelpIpc()
 const disposeFonts = registerFontsIpc()
+const disposeVrm = registerVrmIpc()
 let disposePlugins: (() => void) | null = null
 
 void app.whenReady().then(() => {
+  /**
+   * Gỡ menu mặc định của Electron.
+   *
+   * App không dùng menu bar (mọi thao tác đi qua giao diện riêng), mà menu đó lại mang sẵn
+   * `View → Reload` gắn `CmdOrCtrl+R` và `Force Reload` gắn `Shift+CmdOrCtrl+R`. Accelerator
+   * của menu **chạy trước khi trang thấy phím**, nên Ctrl+R trong terminal bị nuốt: bash không
+   * bao giờ nhận được, `reverse-i-search` coi như không tồn tại — và app im lặng nạp lại, đóng
+   * sạch mọi tab. Kiểm chứng bằng `Menu.getApplicationMenu()`: có thật cả hai mục.
+   *
+   * Cũng gỡ luôn DevTools accelerator — không mất gì, `win.webContents.openDevTools()` vẫn gọi
+   * được khi cần.
+   */
+  Menu.setApplicationMenu(null)
+
   const win = createWindow()
   mainWin = win
   registerUpdaterIpc(win)
@@ -327,8 +398,14 @@ void app.whenReady().then(() => {
   win.on('closed', () => {
     mainWin = null
     detachedMonitorWin?.close()
+    destroyOverlay()
   })
   createTray({ getWindow: () => mainWin, showWindow: showMainWindow, quit: () => app.quit() })
+  // F70 — nhân vật nói NGOÀI desktop khi app ở khay/thu nhỏ mà có thông báo. Cửa sổ chính hiện
+  // lại (từ khay, từ taskbar, từ chính nhân vật) là overlay ẩn — hai nhân vật cùng lúc là thừa.
+  initOverlay({ getMainWindow: () => mainWin, showMainWindow, loadRenderer })
+  win.on('show', hideOverlay)
+  win.on('restore', hideOverlay)
   // Câu hỏi từ main (host key mới, mật khẩu) gửi tới cửa sổ chính đang ẩn → hiện nó lên, không
   // thì câu hỏi hết giờ trong im lặng và tunnel bật từ khay "không lên" không rõ vì sao.
   setPromptVisibilityHook((target) => {
@@ -380,6 +457,8 @@ app.on('before-quit', (event) => {
   disposeReplication()
   disposeWatcher()
   disposeFonts()
+  disposeVrm()
+  destroyOverlay()
   flushSecretClipboard()
   disposeLogTails()
   disposeCodexSessions()

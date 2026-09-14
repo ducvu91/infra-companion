@@ -59,6 +59,8 @@ export {
   systemFontDirs
 } from './fonts/fontDirs'
 export type { FontDirEnv } from './fonts/fontDirs'
+export { VRM_PROBE_BYTES, probeVrm } from './vrm/glb'
+export type { VrmInfo, VrmMeta, VrmProbe, VrmSpec } from './vrm/glb'
 export { MonitorService } from './monitor/MonitorService'
 export type { MetricSample, MonitorTarget } from './monitor/MonitorService'
 export { AlertEngine } from './monitor/AlertEngine'

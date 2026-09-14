@@ -48,6 +48,7 @@ import { KeyRotateModal } from './components/KeyRotateModal'
 import { PackageUpdatesModal } from './components/PackageUpdatesModal'
 import { AiDockHost } from './components/AiDock'
 import { AiDiagnosePill } from './components/AiDiagnosePill'
+import { ReloadGuardModal } from './components/ReloadGuardModal'
 import { RecordingsModal } from './components/RecordingsModal'
 import { SettingsModal } from './components/SettingsModal'
 import { HelpModal, type HelpTab } from './components/HelpModal'
@@ -55,6 +56,7 @@ import { WorkspacesModal } from './components/WorkspacesModal'
 import { PluginsModal } from './components/PluginsModal'
 import { PluginPanelModal } from './components/PluginPanelModal'
 import { AiExplainPanel } from './components/AiExplainPanel'
+import { VrmPanel, useVrmAutoShow } from './components/VrmPanel'
 import { UpdateBanner } from './components/UpdateBanner'
 import { SftpView } from './features/sftp/SftpView'
 import { SftpHome } from './features/sftp/SftpHome'
@@ -136,6 +138,8 @@ export default function App() {
   // Command Palette lên store chung để nút toolbar (TerminalTabView) cũng mở được
   const paletteOpen = useUiStore((s) => s.paletteOpen)
   const cmdHistoryOpen = useUiStore((s) => s.cmdHistoryOpen)
+  const vrmPanelOpen = useUiStore((s) => s.vrmPanelOpen)
+  useVrmAutoShow()
   const setPaletteOpen = useUiStore((s) => s.setPaletteOpen)
   const togglePalette = useUiStore((s) => s.togglePalette)
   // store chung để Sidebar/palette cùng mở — tránh 2 instance modal dẫm chân nhau
@@ -710,7 +714,9 @@ export default function App() {
         <PluginPanelModal panel={pluginPanel} onClose={() => usePluginStore.getState().setPanel(null)} />
       )}
       <AiExplainPanel />{/* tự return null khi không có yêu cầu giải thích */}
+      {vrmPanelOpen && <VrmPanel onClose={() => useUiStore.getState().setVrmPanelOpen(false)} />}
       <AiDiagnosePill />{/* pill khi cửa sổ AI chẩn đoán thu nhỏ; tự return null nếu không thu nhỏ */}
+      <ReloadGuardModal />{/* hỏi lại khi bấm Ctrl+R / F5; tự return null khi chưa bấm */}
 
       {locked && (
         <div className="absolute inset-0 z-[100]">

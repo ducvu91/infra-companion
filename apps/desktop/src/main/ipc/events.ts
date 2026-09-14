@@ -2,6 +2,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { EventStore } from '@infra/core'
 import { IPC, type AppEventDto, type AppEventInput, type AppEventQuery, type MarkerInput } from '@infra/shared'
+import { overlayOnEvent } from '../overlay'
 
 /**
  * Trung tâm thông báo + đánh dấu sự kiện — phần main.
@@ -30,6 +31,8 @@ export function recordEvent(input: AppEventInput): AppEventDto | null {
   try {
     const dto = getEventStore().add(input)
     broadcast(IPC.EVENTS_NEW, dto)
+    // Nhân vật ngoài desktop khi app đang ở khay (F70) — tự quyết có nói hay không, không ném
+    overlayOnEvent(dto)
     return dto
   } catch (error) {
     console.error('[events] cannot record event:', error instanceof Error ? error.message : error)

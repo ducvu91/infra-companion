@@ -56,6 +56,11 @@ export type AppModal =
   | 'jobs'
   | 'security'
   | 'folder-sync'
+  /**
+   * F70 — nhân vật VRM. KHÔNG phải modal thật: `setModal` chuyển nó sang `vrmPanelOpen`.
+   * Có mặt trong union này để vào được `toolCatalog` (menu ⋯, lưới công cụ, palette).
+   */
+  | 'vrm'
   | null
 
 /**
@@ -180,6 +185,13 @@ interface UiState {
   /** F24 — ô tìm lệnh đã chạy (Ctrl+Shift+R). Cùng khuôn với palette để nút/menu cũng mở được. */
   cmdHistoryOpen: boolean
   setCmdHistoryOpen: (v: boolean) => void
+  /**
+   * F70 — panel nhân vật VRM. Cờ riêng (không qua `setModal`) vì đây là panel NỔI sống song
+   * song với mọi thứ khác: nhân vật ở cạnh trong lúc làm việc, không chiếm lượt của modal.
+   */
+  vrmPanelOpen: boolean
+  setVrmPanelOpen: (v: boolean) => void
+  toggleVrmPanel: () => void
 }
 
 const SIDEBAR_KEY = 'infra.sidebar.collapsed'
@@ -267,6 +279,12 @@ export const useUiStore = create<UiState>((set) => ({
     // sau khi chọn, không nên chiếm chỗ của một hộp thoại đang mở.
     if (modal === 'cmd-history') {
       set({ cmdHistoryOpen: true })
+      return
+    }
+    // F70 — nhân vật VRM là panel NỔI cạnh chỗ làm việc, cùng lý do như trên: nó phải ở đó
+    // trong lúc user làm việc khác, nên không được chiếm ô `modal` duy nhất.
+    if (modal === 'vrm') {
+      set({ vrmPanelOpen: true })
       return
     }
     // AI chẩn đoán cũng là DOCK: một phiên chạy nhiều bước, mỗi bước chờ user duyệt — có backdrop
@@ -372,5 +390,8 @@ export const useUiStore = create<UiState>((set) => ({
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
   togglePalette: () => set((s) => ({ paletteOpen: !s.paletteOpen })),
   cmdHistoryOpen: false,
-  setCmdHistoryOpen: (cmdHistoryOpen) => set({ cmdHistoryOpen })
+  setCmdHistoryOpen: (cmdHistoryOpen) => set({ cmdHistoryOpen }),
+  vrmPanelOpen: false,
+  setVrmPanelOpen: (vrmPanelOpen) => set({ vrmPanelOpen }),
+  toggleVrmPanel: () => set((s) => ({ vrmPanelOpen: !s.vrmPanelOpen }))
 }))
